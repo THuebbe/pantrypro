@@ -1,3 +1,5 @@
+// frontend\src\components\dashboard\content\ReportsContent.jsx
+
 export default function ReportsContent({ subsection }) {
 	// Route to specific report based on subsection
 	switch (subsection) {

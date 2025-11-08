@@ -1,3 +1,5 @@
+//  frontend\src\components\dashboard\content\InventoryContent.jsx
+
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";

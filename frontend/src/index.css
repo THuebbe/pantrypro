@@ -1,62 +1,80 @@
+/* frontend\src\index.css */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-	/* Remove default focus styles, use focus-visible instead */
-	*:focus {
-		outline: none;
-	}
-
-	/* Only show focus on keyboard navigation (not mouse clicks) */
-	*:focus-visible {
-		@apply ring-2 ring-green-500 ring-offset-2;
-	}
-
-	/* Prevent text selection on UI elements */
-	button,
-	a,
-	[role="button"],
-	label {
-		user-select: none;
-	}
-
-	/* Keep selection enabled for text content */
-	p,
-	h1,
-	h2,
-	h3,
-	h4,
-	h5,
-	h6,
-	span,
-	li {
-		user-select: text;
-	}
-
-	/* Keep selection enabled for inputs */
-	input,
-	textarea,
-	select {
-		user-select: text;
-	}
-}
-
-/* Remove focus outline from non-input elements (buttons, links, etc.) */
-button:focus,
-a:focus,
-div[role="button"]:focus,
-[tabindex]:focus:not(input):not(textarea):not(select) {
+/* Remove default focus styles everywhere */
+*:focus {
 	outline: none;
 }
 
-/* Remove user-select to prevent text cursor on buttons/clickable elements */
+/* Show focus ring only on keyboard navigation (accessibility) */
+*:focus-visible {
+	outline: 2px solid #22c55e;
+	outline-offset: 2px;
+	border-radius: 0.375rem;
+}
+
+/* Prevent text selection and cursor on buttons/links */
 button,
 a,
 [role="button"],
+label,
 .cursor-pointer {
 	user-select: none;
 	-webkit-user-select: none;
 	-moz-user-select: none;
-	-ms-user-select: none;
+	cursor: pointer;
+}
+
+/* Prevent caret from showing in clickable areas */
+button,
+a,
+[role="button"] {
+	caret-color: transparent;
+}
+
+/* Keep selection enabled for text content */
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+span,
+li,
+td,
+th {
+	user-select: text;
+}
+
+/* Keep selection and cursor enabled for form inputs */
+input,
+textarea,
+select {
+	user-select: text;
+	cursor: text;
+	caret-color: auto;
+}
+
+/* Prevent any element from showing text cursor unless it's an input */
+* {
+	cursor: default;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"] {
+	cursor: text !important;
+}
+
+button,
+a,
+[role="button"],
+[onclick],
+.cursor-pointer {
+	cursor: pointer !important;
 }

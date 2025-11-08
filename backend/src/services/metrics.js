@@ -334,3 +334,153 @@ export async function getReceivingMetrics(restaurantId) {
 		throw new Error(`Failed to get receiving metrics: ${error.message}`);
 	}
 }
+
+/**
+ * Get menu items-specific metrics
+ * @param {string} restaurantId - Restaurant UUID
+ * @returns {Promise<Object>} Menu items metrics
+ */
+export async function getMenuItemsMetrics(restaurantId) {
+	if (!restaurantId) {
+		throw new Error("Restaurant ID is required");
+	}
+
+	try {
+		// 1. Get total active menu items count
+		const { count: totalMenuItems, error: countError } = await supabase
+			.from("menu_items")
+			.select("id", { count: "exact", head: true })
+			.eq("restaurant_id", restaurantId)
+			.eq("is_active", true);
+
+		if (countError) throw countError;
+
+		// 2. Get all menu items with recipes to calculate metrics
+		const { data: menuItems, error: menuItemsError } = await supabase
+			.from("menu_items")
+			.select(
+				`
+        id,
+        name,
+        price,
+        recipe_ingredients (
+          id,
+          quantity,
+          unit,
+          prep_loss_factor,
+          ingredient_library (
+            id,
+            name
+          )
+        )
+      `
+			)
+			.eq("restaurant_id", restaurantId)
+			.eq("is_active", true);
+
+		if (menuItemsError) throw menuItemsError;
+
+		// 3. Count items without recipes
+		const itemsWithoutRecipes =
+			menuItems?.filter(
+				(item) =>
+					!item.recipe_ingredients || item.recipe_ingredients.length === 0
+			).length || 0;
+
+		// 4. Calculate average menu price
+		let avgMenuPrice = 0;
+		if (menuItems && menuItems.length > 0) {
+			const totalPrice = menuItems.reduce(
+				(sum, item) => sum + parseFloat(item.price || 0),
+				0
+			);
+			avgMenuPrice = totalPrice / menuItems.length;
+		}
+
+		// 5. Calculate average recipe cost and food cost percentage
+		const { data: inventory, error: inventoryError } = await supabase
+			.from("restaurant_inventory")
+			.select("ingredient_id, cost_per_unit")
+			.eq("restaurant_id", restaurantId);
+
+		if (inventoryError) throw inventoryError;
+
+		// Create a map of ingredient costs
+		const ingredientCosts = {};
+		inventory?.forEach((item) => {
+			ingredientCosts[item.ingredient_id] = parseFloat(item.cost_per_unit || 0);
+		});
+
+		let totalRecipeCost = 0;
+		let itemsWithRecipes = 0;
+		let worstFoodCostItem = null;
+		let worstFoodCostPercent = 0;
+		let highestPricedItem = "N/A";
+		let highestPrice = 0;
+
+		menuItems?.forEach((item) => {
+			if (item.recipe_ingredients && item.recipe_ingredients.length > 0) {
+				// Calculate recipe cost for this item
+				let recipeCost = 0;
+
+				item.recipe_ingredients.forEach((ingredient) => {
+					const ingredientId = ingredient.ingredient_library?.id;
+					const costPerUnit = ingredientCosts[ingredientId] || 0;
+					const quantity = parseFloat(ingredient.quantity || 0);
+					const prepLoss = parseFloat(ingredient.prep_loss_factor || 0);
+
+					// Convert to pounds if needed
+					let quantityInPounds = quantity;
+					if (ingredient.unit === "oz") {
+						quantityInPounds = quantity / 16;
+					}
+
+					// Apply prep loss
+					const adjustedQuantity = quantityInPounds * (1 + prepLoss / 100);
+
+					recipeCost += adjustedQuantity * costPerUnit;
+				});
+
+				totalRecipeCost += recipeCost;
+				itemsWithRecipes++;
+
+				// Track worst food cost percentage
+				const menuPrice = parseFloat(item.price || 0);
+				if (menuPrice > 0) {
+					const foodCostPercent = (recipeCost / menuPrice) * 100;
+					if (foodCostPercent > worstFoodCostPercent) {
+						worstFoodCostPercent = foodCostPercent;
+						worstFoodCostItem = item.name;
+					}
+				}
+			}
+
+			// Find highest priced item
+			if (parseFloat(item.price || 0) > highestPrice) {
+				highestPrice = parseFloat(item.price || 0);
+				highestPricedItem = `${item.name} ($${highestPrice.toFixed(2)})`;
+			}
+		});
+
+		// Calculate average recipe cost
+		const avgRecipeCost =
+			itemsWithRecipes > 0 ? totalRecipeCost / itemsWithRecipes : 0;
+
+		// Calculate average food cost percentage
+		const avgFoodCostPercent =
+			avgMenuPrice > 0 ? (avgRecipeCost / avgMenuPrice) * 100 : 0;
+
+		return {
+			totalMenuItems: totalMenuItems || 0,
+			itemsWithoutRecipes: itemsWithoutRecipes,
+			avgMenuPrice: parseFloat(avgMenuPrice.toFixed(2)),
+			avgRecipeCost: parseFloat(avgRecipeCost.toFixed(2)),
+			avgFoodCostPercent: parseFloat(avgFoodCostPercent.toFixed(1)),
+			worstFoodCostItem: worstFoodCostItem || "N/A",
+			highestPricedItem: highestPricedItem,
+		};
+	} catch (error) {
+		console.error("Error getting menu items metrics:", error);
+		throw new Error(`Failed to get menu items metrics: ${error.message}`);
+	}
+}

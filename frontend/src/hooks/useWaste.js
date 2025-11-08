@@ -1,3 +1,5 @@
+// frontend\src\hooks\useWaste.js
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
 	fetchWasteReasons,

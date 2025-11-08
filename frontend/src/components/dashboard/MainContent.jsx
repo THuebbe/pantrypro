@@ -6,22 +6,27 @@ import InventoryContent from "./content/InventoryContent";
 import ReceivingContent from "./content/ReceivingContent";
 import OrdersContent from "./content/OrdersContent";
 import ReportsContent from "./content/ReportsContent";
+import MenuItemsContent from "./content/MenuItemsContent";
+import RecipeBuilder from "../menu-items/RecipeBuilder";
 
 export default function MainContent() {
 	const location = useLocation();
-
-	// Extract section from pathname
-	// /inventory/low-stock → 'inventory'
-	// /orders → 'orders'
-	// / or /dashboard → 'dashboard'
 	const pathParts = location.pathname.split("/").filter(Boolean);
 	const section = pathParts[0] || "dashboard";
-	const subsection = pathParts[1]; // e.g., 'low-stock', 'new', etc.
+	const subsection = pathParts[1];
+	const thirdPart = pathParts[2];
 
-	// Route to appropriate content component
+	// Handle recipe builder FIRST: /menu-items/:id/recipe
+	if (section === "menu-items" && subsection && thirdPart === "recipe") {
+		return <RecipeBuilder />;
+	}
+
+	// Then handle other routes
 	switch (section) {
 		case "inventory":
 			return <InventoryContent subsection={subsection} />;
+		case "menu-items":
+			return <MenuItemsContent subsection={subsection} />;
 		case "receiving":
 			return <ReceivingContent subsection={subsection} />;
 		case "orders":

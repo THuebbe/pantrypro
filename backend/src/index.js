@@ -14,6 +14,8 @@ import authRoutes from "./routes/auth.js";
 import ordersRoutes from "./routes/orders.js";
 import reportsRoutes from "./routes/reports.js";
 import wasteRoutes from "./routes/waste.js";
+import menuItemRoutes from "./routes/menuItemRoutes.js";
+import recipeRoutes from "./routes/recipeRoutes.js";
 // Load environment variables
 
 // Initialize Express app
@@ -50,6 +52,8 @@ app.use("/api/business", businessRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/waste", wasteRoutes);
+app.use("/api/menu-items", menuItemRoutes);
+app.use("/api/recipes", recipeRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

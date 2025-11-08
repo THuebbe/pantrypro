@@ -7,6 +7,7 @@ import {
 	ShoppingCart,
 	BarChart3,
 	Trash2,
+	ChefHat,
 } from "lucide-react";
 
 export const menuItems = [
@@ -32,6 +33,13 @@ export const menuItems = [
 				path: "/inventory/remove",
 			}, // 👈 NEW - operational action
 		],
+	},
+	{
+		id: "menu-items",
+		label: "Menu Items",
+		icon: ChefHat,
+		path: "/menu-items",
+		subItems: [],
 	},
 	{
 		id: "receiving",

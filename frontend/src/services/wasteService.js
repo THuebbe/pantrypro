@@ -1,3 +1,5 @@
+// frontend\src\services\wasteService.js
+
 import api from "../core/database/api";
 
 /**

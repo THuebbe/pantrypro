@@ -6,6 +6,7 @@ import {
 	getInventoryMetrics,
 	getOrderMetrics,
 	getReceivingMetrics,
+	getMenuItemsMetrics,
 } from "../services/metrics.js";
 import { requireAuth } from "../middleware/auth.js";
 import { supabase } from "../services/supabase.js";
@@ -203,6 +204,50 @@ router.get("/waste", async (req, res) => {
 		});
 	} catch (error) {
 		console.error("Waste metrics error:", error);
+		res.status(500).json({ error: error.message });
+	}
+});
+
+/**
+ * ⭐ ADD THIS NEW ROUTE at the end of the file ⭐
+ *
+ * GET /api/metrics/menu-items
+ * Get menu items-specific metrics
+ */
+router.get("/menu-items", async (req, res) => {
+	try {
+		// Get restaurant_id from authenticated user's business (same pattern as other routes)
+		const businessId = req.userDetails?.businessId || req.businessId;
+
+		if (!businessId) {
+			return res.status(400).json({ error: "Business ID not found" });
+		}
+
+		const { data: restaurant, error: restaurantError } = await supabase
+			.from("restaurants")
+			.select("id")
+			.eq("business_id", businessId)
+			.single();
+
+		if (restaurantError) {
+			console.error("Error looking up restaurant:", restaurantError);
+			return res.status(500).json({
+				error: "Failed to find restaurant for this business",
+			});
+		}
+
+		if (!restaurant) {
+			return res.status(404).json({
+				error: "No restaurant found for this business. Please contact support.",
+			});
+		}
+
+		const restaurantId = restaurant.id;
+		const metrics = await getMenuItemsMetrics(restaurantId);
+
+		res.json(metrics);
+	} catch (error) {
+		console.error("Error in GET /api/metrics/menu-items:", error);
 		res.status(500).json({ error: error.message });
 	}
 });
