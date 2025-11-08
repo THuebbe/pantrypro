@@ -40,8 +40,8 @@ export default function InventoryContent({ subsection }) {
 				return inventory.filter((item) => {
 					if (!item.expiration_date) return false;
 					const expirationDate = new Date(item.expiration_date);
-					const today = new Date();
-					return expirationDate >= today && expirationDate <= sevenDaysFromNow;
+					// Include both upcoming expirations (within 7 days) AND already expired items
+					return expirationDate <= sevenDaysFromNow;
 				});
 			}
 			case "remove":
@@ -252,7 +252,8 @@ function InventoryCardWithRemove({ item, onRemoveClick, emphasized = false }) {
 
 	const daysUntilExpiry = getDaysUntilExpiry();
 	const isExpiringSoon =
-		daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry >= 0;
+		daysUntilExpiry !== null && daysUntilExpiry <= 7;
+	const isExpired = daysUntilExpiry !== null && daysUntilExpiry < 0;
 
 	return (
 		<div
@@ -280,9 +281,20 @@ function InventoryCardWithRemove({ item, onRemoveClick, emphasized = false }) {
 							</span>
 						)}
 						{isExpiringSoon && (
-							<span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-xs rounded">
-								📅 Expires in {daysUntilExpiry} days
-							</span>
+							<span
+							className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded font-semibold ${
+								isExpired
+									? "bg-red-600 text-white"
+									: "bg-orange-100 text-orange-800"
+							}`}
+						>
+							{isExpired
+								? `❌ Expired! (${Math.abs(daysUntilExpiry)} days ago)`
+								: daysUntilExpiry === 0
+									? "📅 Expires today!"
+									: `📅 Expires in ${daysUntilExpiry} days`
+							}
+						</span>
 						)}
 					</div>
 

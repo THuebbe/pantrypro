@@ -184,6 +184,8 @@
 | recipe_ingredients   | quantity               | numeric                     |
 | recipe_ingredients   | unit                   | character varying           |
 | recipe_ingredients   | prep_loss_factor       | numeric                     |
+| recipe_ingredients   | created_at             | timestamp without time zone |
+| recipe_ingredients   | updated_at             | timestamp without time zone |
 | restaurant_inventory | id                     | uuid                        |
 | restaurant_inventory | restaurant_id          | uuid                        |
 | restaurant_inventory | ingredient_id          | uuid                        |
@@ -212,34 +214,6 @@
 | restaurants          | pricing_config         | jsonb                       |
 | restaurants          | created_at             | timestamp without time zone |
 | restaurants          | updated_at             | timestamp without time zone |
-| sign_check_ins       | id                     | text                        |
-| sign_check_ins       | orderId                | text                        |
-| sign_check_ins       | signId                 | text                        |
-| sign_check_ins       | condition              | text                        |
-| sign_check_ins       | notes                  | text                        |
-| sign_check_ins       | damagePhotos           | ARRAY                       |
-| sign_check_ins       | checkedInById          | text                        |
-| sign_check_ins       | createdAt              | timestamp without time zone |
-| sign_library         | id                     | text                        |
-| sign_library         | name                   | text                        |
-| sign_library         | description            | text                        |
-| sign_library         | category               | text                        |
-| sign_library         | theme                  | text                        |
-| sign_library         | sizeWidth              | integer                     |
-| sign_library         | sizeHeight             | integer                     |
-| sign_library         | dimensions             | jsonb                       |
-| sign_library         | themes                 | ARRAY                       |
-| sign_library         | holidays               | ARRAY                       |
-| sign_library         | keywords               | ARRAY                       |
-| sign_library         | imageUrl               | text                        |
-| sign_library         | thumbnailUrl           | text                        |
-| sign_library         | isPlatform             | boolean                     |
-| sign_library         | createdBy              | text                        |
-| sign_library         | bundleId               | text                        |
-| sign_library         | bundlePosition         | integer                     |
-| sign_library         | createdAt              | timestamp without time zone |
-| sign_library         | updatedAt              | timestamp without time zone |
-| sign_library         | rentalPrice            | integer                     |
 | transactions         | id                     | text                        |
 | transactions         | agencyId               | text                        |
 | transactions         | orderId                | text                        |
