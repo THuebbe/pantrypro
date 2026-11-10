@@ -19,8 +19,13 @@ import { processUndeductedSales } from "../services/inventoryDeductionService.js
 let syncIntervalId = null;
 let isRunning = false;
 
-// Default interval: 15 minutes
-const DEFAULT_INTERVAL_MS = 15 * 60 * 1000;
+// Default interval: 5 minutes (override with POS_SYNC_INTERVAL_MINUTES)
+const DEFAULT_INTERVAL_MS =
+	(Number(process.env.POS_SYNC_INTERVAL_MINUTES) || 5) * 60 * 1000;
+
+// Each sync looks back a little before the last one so an order saved
+// right at the boundary is not missed. Re-reading an order is harmless.
+const SYNC_OVERLAP_MS = 2 * 60 * 1000;
 
 /**
  * Start the sales processing job
@@ -89,7 +94,9 @@ async function runSalesProcessingCycle() {
 			try {
 				// Calculate sync window: from last sync to now
 				const startDate = restaurant.last_pos_sync
-					? new Date(restaurant.last_pos_sync).toISOString()
+					? new Date(
+							new Date(restaurant.last_pos_sync).getTime() - SYNC_OVERLAP_MS
+					  ).toISOString()
 					: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // Default: last 24 hours
 
 				const endDate = new Date().toISOString();

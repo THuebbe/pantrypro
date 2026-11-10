@@ -24,11 +24,12 @@ export default function ToastIntegration({ onBack, onConnectionChange, onStartPr
 		restaurantGuid: "",
 		clientId: "",
 		clientSecret: "",
-		apiUrl: "https://ws-sandbox-api.toasttab.com",
+		apiUrl: "https://ws-api.toasttab.com",
 	});
 	const [showSecret, setShowSecret] = useState(false);
 	const [showGuide, setShowGuide] = useState(false);
 	const [connectionStatus, setConnectionStatus] = useState(null);
+	const [connectionError, setConnectionError] = useState("");
 
 	const verifyMutation = usePOSVerify();
 	const saveCredentialsMutation = usePOSSaveCredentials();
@@ -37,6 +38,7 @@ export default function ToastIntegration({ onBack, onConnectionChange, onStartPr
 	const handleInputChange = (field, value) => {
 		setCredentials((prev) => ({ ...prev, [field]: value }));
 		setConnectionStatus(null);
+		setConnectionError("");
 	};
 
 	const handleTestConnection = async () => {
@@ -64,11 +66,13 @@ export default function ToastIntegration({ onBack, onConnectionChange, onStartPr
 				onConnectionChange?.(true);
 			} else {
 				setConnectionStatus("failed");
+				setConnectionError(result.error || "");
 				onConnectionChange?.(false);
 			}
 		} catch (error) {
 			console.error("Connection test failed:", error);
 			setConnectionStatus("error");
+			setConnectionError(error.response?.data?.error || "");
 			onConnectionChange?.(false);
 		}
 	};
@@ -124,20 +128,15 @@ export default function ToastIntegration({ onBack, onConnectionChange, onStartPr
 								1
 							</span>
 							<div>
-								<p className="font-medium">Apply to Toast Partner Program</p>
+								<p className="font-medium">Open Toast API access in Toast Web</p>
 								<p className="text-gray-600 mt-1">
-									Visit{" "}
-									<a
-										href="https://pos.toasttab.com/partners"
-										target="_blank"
-										rel="noopener noreferrer"
-										className="text-blue-600 hover:underline inline-flex items-center gap-1"
-									>
-										pos.toasttab.com/partners
-										<ExternalLink className="w-3 h-3" />
-									</a>{" "}
-									and apply as an "Integration Partner". Describe your use case
-									as inventory management for menu and sales sync.
+									Sign in to Toast Web and go to{" "}
+									<strong>
+										Integrations &gt; Toast API access &gt; Manage credentials
+									</strong>
+									. You need the <strong>8.4 Manage Integrations</strong>{" "}
+									permission, and your location needs Restaurant Management
+									Suite Essentials or higher.
 								</p>
 							</div>
 						</li>
@@ -146,11 +145,15 @@ export default function ToastIntegration({ onBack, onConnectionChange, onStartPr
 								2
 							</span>
 							<div>
-								<p className="font-medium">Create an App in Developer Portal</p>
+								<p className="font-medium">Create read-only credentials</p>
 								<p className="text-gray-600 mt-1">
-									Once approved, access the Toast Developer Portal and create a
-									new application. This generates your Client ID and Client
-									Secret.
+									Open the <strong>Create new credentials</strong> menu and
+									choose <strong>Standard API</strong>. Name the credentials
+									"PantryPro" and choose your location. Select these
+									permissions (scopes): <strong>orders:read</strong>,{" "}
+									<strong>menus:read</strong> and{" "}
+									<strong>restaurants:read</strong>. PantryPro can read your
+									sales and menu. It cannot change anything in Toast.
 								</p>
 							</div>
 						</li>
@@ -159,11 +162,11 @@ export default function ToastIntegration({ onBack, onConnectionChange, onStartPr
 								3
 							</span>
 							<div>
-								<p className="font-medium">Find Your Restaurant GUID</p>
+								<p className="font-medium">Copy the Client ID and Client Secret</p>
 								<p className="text-gray-600 mt-1">
-									The Restaurant GUID is found in Toast Web under{" "}
-									<strong>Admin &gt; Toast API</strong> or provided during
-									partner setup. It's a unique identifier for your restaurant.
+									Select <strong>Confirm</strong>, then copy both values from
+									the Credentials page into the fields below. They are
+									encrypted before PantryPro stores them.
 								</p>
 							</div>
 						</li>
@@ -172,11 +175,10 @@ export default function ToastIntegration({ onBack, onConnectionChange, onStartPr
 								4
 							</span>
 							<div>
-								<p className="font-medium">Start with Sandbox (Recommended)</p>
+								<p className="font-medium">Find your Restaurant GUID</p>
 								<p className="text-gray-600 mt-1">
-									Use the sandbox API URL for testing before switching to
-									production. This allows you to verify the integration without
-									affecting real data.
+									Toast emails the GUID for each location when the credentials
+									are activated. Toast Support can also provide it.
 								</p>
 							</div>
 						</li>
@@ -185,8 +187,17 @@ export default function ToastIntegration({ onBack, onConnectionChange, onStartPr
 						<div className="flex items-start gap-2">
 							<AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
 							<p className="text-sm text-amber-800">
-								<strong>Note:</strong> Partner approval typically takes 1-2
-								weeks. You can explore the rest of Invantry while waiting!
+								<strong>Need more detail?</strong> See Toast's guide to{" "}
+								<a
+									href="https://doc.toasttab.com/doc/devguide/devApiAccessCredentials.html"
+									target="_blank"
+									rel="noopener noreferrer"
+									className="underline inline-flex items-center gap-1"
+								>
+									Standard API access credentials
+									<ExternalLink className="w-3 h-3" />
+								</a>
+								.
 							</p>
 						</div>
 					</div>
@@ -207,7 +218,7 @@ export default function ToastIntegration({ onBack, onConnectionChange, onStartPr
 						className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
 					/>
 					<p className="mt-1 text-xs text-gray-500">
-						Found in Toast Web under Admin &gt; Toast API
+						Emailed by Toast when your API credentials are activated
 					</p>
 				</div>
 
@@ -250,26 +261,6 @@ export default function ToastIntegration({ onBack, onConnectionChange, onStartPr
 					</div>
 				</div>
 
-				<div>
-					<label className="block text-sm font-medium text-gray-700 mb-1">
-						API URL
-					</label>
-					<select
-						value={credentials.apiUrl}
-						onChange={(e) => handleInputChange("apiUrl", e.target.value)}
-						className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-					>
-						<option value="https://ws-sandbox-api.toasttab.com">
-							Sandbox (Testing)
-						</option>
-						<option value="https://ws-api.toasttab.com">
-							Production (Live Data)
-						</option>
-					</select>
-					<p className="mt-1 text-xs text-gray-500">
-						Use Sandbox for testing, Production for live restaurant data
-					</p>
-				</div>
 			</div>
 
 			{/* Connection Status */}
@@ -309,13 +300,15 @@ export default function ToastIntegration({ onBack, onConnectionChange, onStartPr
 							</p>
 							{connectionStatus === "connected" && previewQuery.data && (
 								<p className="text-sm text-green-700 mt-1">
-									Found {previewQuery.data.summary?.totalItems || 0} menu items
+									Found {previewQuery.data.stats?.total || 0} menu items
 									ready to import
 								</p>
 							)}
-							{connectionStatus === "failed" && (
+							{(connectionStatus === "failed" ||
+								connectionStatus === "error") && (
 								<p className="text-sm text-red-700 mt-1">
-									Please check your credentials and try again
+									{connectionError ||
+										"Please check your credentials and try again"}
 								</p>
 							)}
 						</div>

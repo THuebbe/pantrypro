@@ -8,7 +8,9 @@
  */
 
 import { supabase } from "./supabase.js";
-import { fetchToastOrders, fetchToastOrder } from "./posAdapters/toastOrdersAdapter.js";
+import { decryptCredentials } from "./credentialVault.js";
+import { reverseDeductionsForSale } from "./inventoryDeductionService.js";
+import { fetchAllToastOrders } from "./posAdapters/toastOrdersAdapter.js";
 
 /**
  * Sync sales from POS system for a date range
@@ -38,6 +40,10 @@ export async function syncSalesFromPOS(restaurantId, posSystem, options = {}) {
 			throw new Error("POS integration not configured for this restaurant");
 		}
 
+		// Orders are selected by modification time, so the next sync must start
+		// from when this one began or changes made while it runs are missed.
+		const syncStartedAt = new Date().toISOString();
+
 		let orders = [];
 		const stats = {
 			fetched: 0,
@@ -50,20 +56,13 @@ export async function syncSalesFromPOS(restaurantId, posSystem, options = {}) {
 		// Fetch orders based on POS system
 		switch (posSystem.toLowerCase()) {
 			case "toast": {
-				let hasMore = true;
-				let pageToken = null;
-
-				while (hasMore) {
-					const result = await fetchToastOrders(restaurant.pos_integration_data, {
+				orders = await fetchAllToastOrders(
+					decryptCredentials(restaurant.pos_integration_data),
+					{
 						startDate: options.startDate,
 						endDate: options.endDate,
-						pageToken,
-					});
-
-					orders = orders.concat(result.orders);
-					hasMore = result.pagination.hasMore;
-					pageToken = result.pagination.nextPageToken;
-				}
+					}
+				);
 				break;
 			}
 			default:
@@ -90,7 +89,7 @@ export async function syncSalesFromPOS(restaurantId, posSystem, options = {}) {
 		}
 
 		// Update last sync timestamp
-		await updateLastSyncTimestamp(restaurantId, posSystem);
+		await updateLastSyncTimestamp(restaurantId, syncStartedAt);
 
 		return {
 			success: true,
@@ -116,16 +115,27 @@ async function upsertSale(restaurantId, posSystem, order) {
 		// Check if we have this order and need to mark it as voided
 		const { data: existing } = await supabase
 			.from("pos_sales")
-			.select("id")
+			.select("id, voided, inventory_deducted")
 			.eq("restaurant_id", restaurantId)
+			.eq("pos_system", posSystem)
 			.eq("pos_order_id", order.posOrderId)
-			.single();
+			.maybeSingle();
 
 		if (existing) {
+			if (existing.voided && !existing.inventory_deducted) {
+				return { action: "skipped", reason: "already_voided" };
+			}
+
+			// Stock was already taken out for this order, so put it back.
+			if (existing.inventory_deducted) {
+				await reverseDeductionsForSale(restaurantId, existing.id, null);
+			}
+
 			await supabase
 				.from("pos_sales")
 				.update({
 					voided: true,
+					status: order.status,
 					updated_at: new Date().toISOString(),
 				})
 				.eq("id", existing.id);
@@ -141,8 +151,9 @@ async function upsertSale(restaurantId, posSystem, order) {
 		.from("pos_sales")
 		.select("id, updated_at")
 		.eq("restaurant_id", restaurantId)
+		.eq("pos_system", posSystem)
 		.eq("pos_order_id", order.posOrderId)
-		.single();
+		.maybeSingle();
 
 	const saleData = {
 		restaurant_id: restaurantId,
@@ -160,11 +171,11 @@ async function upsertSale(restaurantId, posSystem, order) {
 		total_amount: order.total,
 		voided: order.voided || false,
 		raw_data: order.rawData,
-		inventory_deducted: false,
 	};
 
 	if (existingSale) {
-		// Update existing
+		// Update existing. inventory_deducted is left as it is: resetting it
+		// here would deduct the same order again on every later sync.
 		const { error: updateError } = await supabase
 			.from("pos_sales")
 			.update({
@@ -185,6 +196,7 @@ async function upsertSale(restaurantId, posSystem, order) {
 			.from("pos_sales")
 			.insert({
 				...saleData,
+				inventory_deducted: false,
 				created_at: new Date().toISOString(),
 				updated_at: new Date().toISOString(),
 			})
@@ -270,11 +282,11 @@ async function updateSaleLineItems(saleId, lineItems) {
 /**
  * Update last sync timestamp for a restaurant
  */
-async function updateLastSyncTimestamp(restaurantId, posSystem) {
+async function updateLastSyncTimestamp(restaurantId, syncedAt) {
 	await supabase
 		.from("restaurants")
 		.update({
-			last_pos_sync: new Date().toISOString(),
+			last_pos_sync: syncedAt || new Date().toISOString(),
 			updated_at: new Date().toISOString(),
 		})
 		.eq("id", restaurantId);

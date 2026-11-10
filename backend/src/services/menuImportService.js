@@ -1,6 +1,7 @@
 // /backend/src/services/menuImportService.js
 
 import { supabase } from "./supabase.js";
+import { encryptCredentials, decryptCredentials } from "./credentialVault.js";
 import {
 	fetchToastMenuItems,
 	verifyToastConnection,
@@ -38,7 +39,7 @@ export async function importMenuFromPOS(restaurantId, posSystem, options = {}) {
 		// Get restaurant and POS credentials
 		const { data: restaurant, error: restaurantError } = await supabase
 			.from("restaurants")
-			.select("*")
+			.select("pos_integration_data")
 			.eq("id", restaurantId)
 			.single();
 
@@ -48,24 +49,20 @@ export async function importMenuFromPOS(restaurantId, posSystem, options = {}) {
 			throw new Error("POS integration not configured for this restaurant");
 		}
 
+		const posCredentials = decryptCredentials(restaurant.pos_integration_data);
+
 		// Fetch menu items from POS based on system type
 		let posMenuItems;
 
 		switch (posSystem.toLowerCase()) {
 			case "toast":
-				posMenuItems = await fetchToastMenuItems(
-					restaurant.pos_integration_data
-				);
+				posMenuItems = await fetchToastMenuItems(posCredentials);
 				break;
 			case "square":
-				posMenuItems = await fetchSquareMenuItems(
-					restaurant.pos_integration_data
-				);
+				posMenuItems = await fetchSquareMenuItems(posCredentials);
 				break;
 			case "clover":
-				posMenuItems = await fetchCloverMenuItems(
-					restaurant.pos_integration_data
-				);
+				posMenuItems = await fetchCloverMenuItems(posCredentials);
 				break;
 			default:
 				throw new Error(`Unsupported POS system: ${posSystem}`);
@@ -272,23 +269,19 @@ export async function verifyPOSConnection(restaurantId, posSystem) {
 			};
 		}
 
+		const posCredentials = decryptCredentials(restaurant.pos_integration_data);
+
 		let isConnected = false;
 
 		switch (posSystem.toLowerCase()) {
 			case "toast":
-				isConnected = await verifyToastConnection(
-					restaurant.pos_integration_data
-				);
+				isConnected = await verifyToastConnection(posCredentials);
 				break;
 			case "square":
-				isConnected = await verifySquareConnection(
-					restaurant.pos_integration_data
-				);
+				isConnected = await verifySquareConnection(posCredentials);
 				break;
 			case "clover":
-				isConnected = await verifyCloverConnection(
-					restaurant.pos_integration_data
-				);
+				isConnected = await verifyCloverConnection(posCredentials);
 				break;
 			default:
 				throw new Error(`Unsupported POS system: ${posSystem}`);
@@ -324,7 +317,7 @@ export async function getImportPreview(restaurantId, posSystem) {
 		// Get restaurant and POS credentials
 		const { data: restaurant, error: restaurantError } = await supabase
 			.from("restaurants")
-			.select("*")
+			.select("pos_integration_data")
 			.eq("id", restaurantId)
 			.single();
 
@@ -334,24 +327,20 @@ export async function getImportPreview(restaurantId, posSystem) {
 			throw new Error("POS integration not configured for this restaurant");
 		}
 
+		const posCredentials = decryptCredentials(restaurant.pos_integration_data);
+
 		// Fetch menu items from POS
 		let posMenuItems;
 
 		switch (posSystem.toLowerCase()) {
 			case "toast":
-				posMenuItems = await fetchToastMenuItems(
-					restaurant.pos_integration_data
-				);
+				posMenuItems = await fetchToastMenuItems(posCredentials);
 				break;
 			case "square":
-				posMenuItems = await fetchSquareMenuItems(
-					restaurant.pos_integration_data
-				);
+				posMenuItems = await fetchSquareMenuItems(posCredentials);
 				break;
 			case "clover":
-				posMenuItems = await fetchCloverMenuItems(
-					restaurant.pos_integration_data
-				);
+				posMenuItems = await fetchCloverMenuItems(posCredentials);
 				break;
 			default:
 				throw new Error(`Unsupported POS system: ${posSystem}`);
@@ -464,7 +453,7 @@ export async function getImportPreview(restaurantId, posSystem) {
  * @param {string} restaurantId - Restaurant UUID
  * @param {string} posSystem - POS system type
  * @param {object} credentials - POS credentials (structure varies by system)
- * @returns {Promise<Object>} Updated restaurant record
+ * @returns {Promise<Object>} Restaurant id and POS system (no credentials)
  */
 export async function savePOSCredentials(restaurantId, posSystem, credentials) {
 	if (!restaurantId) {
@@ -474,15 +463,17 @@ export async function savePOSCredentials(restaurantId, posSystem, credentials) {
 	try {
 		const now = new Date().toISOString();
 
+		// Secrets are encrypted before they reach the database and are never
+		// returned to the browser.
 		const { data, error } = await supabase
 			.from("restaurants")
 			.update({
 				pos_system: posSystem.toLowerCase(),
-				pos_integration_data: credentials,
+				pos_integration_data: encryptCredentials(credentials),
 				updated_at: now,
 			})
 			.eq("id", restaurantId)
-			.select()
+			.select("id, pos_system")
 			.single();
 
 		if (error) throw error;
