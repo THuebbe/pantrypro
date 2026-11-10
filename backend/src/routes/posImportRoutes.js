@@ -9,6 +9,7 @@ import {
 	savePOSCredentials,
 } from "../services/menuImportService.js";
 import { getSquareLocations } from "../services/posAdapters/squareAdapter.js";
+import { resolveToastApiUrl } from "../services/posAdapters/toastClient.js";
 
 const router = express.Router();
 
@@ -28,10 +29,13 @@ router.use(requireAuth);
  *   "posSystem": "toast",
  *   "credentials": {
  *     "restaurantGuid": "abc-123",
- *     "accessToken": "token-xyz",
+ *     "clientId": "client-id-from-toast-web",
+ *     "clientSecret": "client-secret-from-toast-web",
  *     "apiUrl": "https://ws-api.toasttab.com"
  *   }
  * }
+ *
+ * Credentials are encrypted before they are stored and are never sent back.
  *
  * Body (Square):
  * {
@@ -74,10 +78,34 @@ router.post("/credentials", async (req, res) => {
 			});
 		}
 
+		let credentialsToSave = credentials;
+
+		if (posSystem.toLowerCase() === "toast") {
+			const restaurantGuid = String(credentials.restaurantGuid || "").trim();
+			const clientId = String(credentials.clientId || "").trim();
+			const clientSecret = String(credentials.clientSecret || "").trim();
+
+			if (!restaurantGuid || !clientId || !clientSecret) {
+				return res.status(400).json({
+					error: "Toast needs a restaurant GUID, client ID and client secret",
+				});
+			}
+
+			let apiUrl;
+			try {
+				apiUrl = resolveToastApiUrl({ apiUrl: credentials.apiUrl });
+			} catch (urlError) {
+				return res.status(400).json({ error: urlError.message });
+			}
+
+			// Store only the fields the Toast connection uses.
+			credentialsToSave = { restaurantGuid, clientId, clientSecret, apiUrl };
+		}
+
 		const restaurant = await savePOSCredentials(
 			restaurantId,
 			posSystem,
-			credentials
+			credentialsToSave
 		);
 
 		res.json({

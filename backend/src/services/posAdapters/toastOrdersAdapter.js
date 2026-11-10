@@ -3,208 +3,217 @@
 /**
  * Toast POS Orders/Sales Adapter
  *
- * Toast API Documentation: https://doc.toasttab.com/
+ * Fetches orders from Toast for sales tracking and inventory deduction,
+ * using GET /orders/v2/ordersBulk (scope: orders:read). Works with the
+ * read-only Standard API access a restaurant sets up in Toast Web.
  *
- * Fetches orders from Toast for sales tracking and inventory deduction.
- * Requires Orders API scope in Toast Partner application.
+ * Toast documentation:
+ *   https://doc.toasttab.com/doc/devguide/apiOrdersGetDetailedInfoAboutMultipleOrders.html
  */
 
-import axios from "axios";
+import { toastGet, assertToastCredentials } from "./toastClient.js";
+
+const MAX_PAGE_SIZE = 100; // Toast's limit
+const MAX_PAGES = 500; // Safety stop: 50,000 orders in one sync
+const MAX_WINDOW_MS = 31 * 24 * 60 * 60 * 1000; // Toast asks for a month or less
 
 /**
- * Fetch orders from Toast POS for a date range
- * @param {object} credentials - Toast API credentials
- * @param {string} credentials.restaurantGuid - Toast restaurant GUID
- * @param {string} credentials.accessToken - Toast API access token
- * @param {string} credentials.apiUrl - Optional API URL override
+ * Convert a date input to the ISO-8601 format Toast expects
+ * @param {string|Date} value - Date, ISO string or YYYY-MM-DD
+ * @returns {string} e.g. 2026-03-02T19:10:30.000Z
+ */
+function toToastTimestamp(value) {
+	const date = value instanceof Date ? value : new Date(value);
+
+	if (Number.isNaN(date.getTime())) {
+		throw new Error(`Invalid date: ${value}`);
+	}
+
+	return date.toISOString();
+}
+
+/**
+ * Convert Toast's business date (integer yyyyMMdd) to YYYY-MM-DD
+ * @param {number|string} businessDate - e.g. 20260302
+ * @returns {string|null} e.g. 2026-03-02
+ */
+export function formatBusinessDate(businessDate) {
+	const digits = String(businessDate ?? "");
+
+	if (!/^\d{8}$/.test(digits)) return null;
+
+	return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+}
+
+/**
+ * Fetch one page of orders modified in a time window
+ * @param {object} credentials - Toast credentials
  * @param {object} options - Fetch options
- * @param {string} options.startDate - Start date (ISO string or YYYY-MM-DD)
- * @param {string} options.endDate - End date (ISO string or YYYY-MM-DD)
- * @param {number} options.pageSize - Number of orders per page (default: 100)
- * @param {string} options.pageToken - Pagination token for next page
- * @returns {Promise<Object>} Orders data with pagination info
+ * @param {string} options.startDate - Window start (inclusive)
+ * @param {string} options.endDate - Window end (exclusive)
+ * @param {number} options.page - Page number, starting at 1
+ * @param {number} options.pageSize - Orders per page (max 100)
+ * @returns {Promise<Object>} Orders and whether another page may exist
  */
 export async function fetchToastOrders(credentials, options = {}) {
-	const { restaurantGuid, accessToken, apiUrl } = credentials;
+	assertToastCredentials(credentials);
 
-	if (!restaurantGuid || !accessToken) {
-		throw new Error(
-			"Toast credentials incomplete: restaurantGuid and accessToken required"
-		);
+	const now = new Date();
+	const startOfToday = new Date(now);
+	startOfToday.setHours(0, 0, 0, 0);
+
+	const startDate = toToastTimestamp(options.startDate || startOfToday);
+	const endDate = toToastTimestamp(options.endDate || now);
+	const page = options.page || 1;
+	const pageSize = Math.min(options.pageSize || MAX_PAGE_SIZE, MAX_PAGE_SIZE);
+
+	if (new Date(endDate) <= new Date(startDate)) {
+		return { orders: [], pagination: { page, hasMore: false } };
 	}
 
-	const baseUrl =
-		apiUrl || process.env.TOAST_API_URL || "https://ws-api.toasttab.com";
+	if (new Date(endDate) - new Date(startDate) > MAX_WINDOW_MS) {
+		throw new Error("Toast sales can be synced at most 31 days at a time");
+	}
 
-	const {
+	const data = await toastGet(credentials, "/orders/v2/ordersBulk", {
 		startDate,
 		endDate,
-		pageSize = 100,
-		pageToken,
-	} = options;
+		page,
+		pageSize,
+	});
 
-	// Default to today if no dates provided
-	const now = new Date();
-	const defaultStart = new Date(now.setHours(0, 0, 0, 0)).toISOString();
-	const defaultEnd = new Date().toISOString();
+	const rawOrders = Array.isArray(data) ? data : [];
 
-	try {
-		// Build query parameters
-		const params = new URLSearchParams({
-			startDate: startDate || defaultStart,
-			endDate: endDate || defaultEnd,
-			pageSize: pageSize.toString(),
-		});
+	return {
+		orders: rawOrders.map(normalizeToastOrder),
+		pagination: {
+			page,
+			// A full page means there may be another one.
+			hasMore: rawOrders.length === pageSize,
+		},
+	};
+}
 
-		if (pageToken) {
-			params.append("pageToken", pageToken);
-		}
+/**
+ * Fetch every order modified in a time window, following pagination
+ * @param {object} credentials - Toast credentials
+ * @param {object} options - Fetch options
+ * @param {string} options.startDate - Window start
+ * @param {string} options.endDate - Window end
+ * @returns {Promise<Array>} Normalized orders
+ */
+export async function fetchAllToastOrders(credentials, options = {}) {
+	let orders = [];
+	let page = 1;
+	let hasMore = true;
 
-		// Toast Orders API endpoint
-		const response = await axios.get(
-			`${baseUrl}/orders/v2/orders?${params.toString()}`,
-			{
-				headers: {
-					Authorization: `Bearer ${accessToken}`,
-					"Toast-Restaurant-External-ID": restaurantGuid,
-					"Content-Type": "application/json",
-				},
-			}
-		);
+	while (hasMore && page <= MAX_PAGES) {
+		const result = await fetchToastOrders(credentials, { ...options, page });
 
-		// Normalize orders to our format
-		const normalizedOrders = (response.data.orders || []).map((order) =>
-			normalizeToastOrder(order)
-		);
-
-		return {
-			orders: normalizedOrders,
-			pagination: {
-				hasMore: !!response.data.nextPageToken,
-				nextPageToken: response.data.nextPageToken || null,
-				totalCount: response.data.totalCount || normalizedOrders.length,
-			},
-		};
-	} catch (error) {
-		console.error("Error fetching Toast orders:", error);
-
-		if (error.response) {
-			throw new Error(
-				`Toast Orders API error (${error.response.status}): ${
-					error.response.data?.message || error.message
-				}`
-			);
-		}
-
-		throw new Error(`Failed to fetch Toast orders: ${error.message}`);
+		orders = orders.concat(result.orders);
+		hasMore = result.pagination.hasMore;
+		page++;
 	}
+
+	return orders;
 }
 
 /**
  * Fetch a single order by ID
- * @param {object} credentials - Toast API credentials
+ * @param {object} credentials - Toast credentials
  * @param {string} orderId - Toast order GUID
- * @returns {Promise<Object>} Normalized order data
+ * @returns {Promise<Object|null>} Normalized order data
  */
 export async function fetchToastOrder(credentials, orderId) {
-	const { restaurantGuid, accessToken, apiUrl } = credentials;
-
-	if (!restaurantGuid || !accessToken) {
-		throw new Error(
-			"Toast credentials incomplete: restaurantGuid and accessToken required"
-		);
-	}
-
-	const baseUrl =
-		apiUrl || process.env.TOAST_API_URL || "https://ws-api.toasttab.com";
+	assertToastCredentials(credentials);
 
 	try {
-		const response = await axios.get(
-			`${baseUrl}/orders/v2/orders/${orderId}`,
-			{
-				headers: {
-					Authorization: `Bearer ${accessToken}`,
-					"Toast-Restaurant-External-ID": restaurantGuid,
-					"Content-Type": "application/json",
-				},
-			}
+		const data = await toastGet(
+			credentials,
+			`/orders/v2/orders/${encodeURIComponent(orderId)}`
 		);
 
-		return normalizeToastOrder(response.data);
+		return normalizeToastOrder(data);
 	} catch (error) {
-		console.error("Error fetching Toast order:", error);
-
-		if (error.response?.status === 404) {
+		if (/\(404\)/.test(error.message)) {
 			return null;
 		}
 
-		throw new Error(`Failed to fetch Toast order: ${error.message}`);
+		throw error;
 	}
 }
 
 /**
- * Normalize a Toast order to our internal format
+ * Normalize a Toast order to our internal format.
+ *
+ * Toast reports money as decimal currency amounts (dollars), not cents.
+ * A selection's price is the total for that line, so the unit price is
+ * the line total divided by the quantity.
+ *
  * @param {object} toastOrder - Raw Toast order data
  * @returns {object} Normalized order
  */
-function normalizeToastOrder(toastOrder) {
-	// Extract line items from checks
+export function normalizeToastOrder(toastOrder) {
 	const lineItems = [];
-
-	if (toastOrder.checks && Array.isArray(toastOrder.checks)) {
-		for (const check of toastOrder.checks) {
-			if (check.selections && Array.isArray(check.selections)) {
-				for (const selection of check.selections) {
-					lineItems.push({
-						posMenuItemId: selection.item?.guid || selection.itemGuid,
-						name: selection.displayName || selection.item?.name || "Unknown Item",
-						quantity: selection.quantity || 1,
-						unitPrice: selection.price ? selection.price / 100 : 0, // Toast uses cents
-						totalPrice: selection.price
-							? (selection.price * (selection.quantity || 1)) / 100
-							: 0,
-						modifiers: (selection.modifiers || []).map((mod) => ({
-							name: mod.displayName || mod.name,
-							price: mod.price ? mod.price / 100 : 0,
-						})),
-						voided: selection.voided || false,
-						voidReason: selection.voidReason || null,
-					});
-				}
-			}
-		}
-	}
-
-	// Calculate totals from checks
 	let subtotal = 0;
 	let tax = 0;
 	let total = 0;
 
-	if (toastOrder.checks && Array.isArray(toastOrder.checks)) {
-		for (const check of toastOrder.checks) {
-			subtotal += check.subtotal ? check.subtotal / 100 : 0;
-			tax += check.taxAmount ? check.taxAmount / 100 : 0;
-			total += check.totalAmount ? check.totalAmount / 100 : 0;
+	const checks = Array.isArray(toastOrder.checks) ? toastOrder.checks : [];
+
+	for (const check of checks) {
+		// A voided or deleted check was never sold.
+		if (check.voided || check.deleted) continue;
+
+		subtotal += Number(check.amount) || 0;
+		tax += Number(check.taxAmount) || 0;
+		total += Number(check.totalAmount) || 0;
+
+		for (const selection of check.selections || []) {
+			const quantity =
+				typeof selection.quantity === "number" ? selection.quantity : 1;
+			const lineTotal = Number(selection.price) || 0;
+
+			lineItems.push({
+				posMenuItemId: selection.item?.guid || null,
+				name: selection.displayName || "Unknown Item",
+				quantity,
+				unitPrice: quantity ? roundMoney(lineTotal / quantity) : 0,
+				totalPrice: roundMoney(lineTotal),
+				modifiers: (selection.modifiers || []).map((mod) => ({
+					posMenuItemId: mod.item?.guid || null,
+					name: mod.displayName,
+					price: Number(mod.price) || 0,
+				})),
+				voided: selection.voided || false,
+				voidReason: selection.voidReason || null,
+			});
 		}
 	}
 
 	return {
 		posOrderId: toastOrder.guid,
-		orderNumber: toastOrder.displayNumber || toastOrder.externalId,
+		orderNumber:
+			toastOrder.displayNumber || checks[0]?.displayNumber || toastOrder.externalId,
 		orderDate: toastOrder.openedDate || toastOrder.createdDate,
-		businessDate: toastOrder.businessDate,
-		closedDate: toastOrder.closedDate,
+		businessDate: formatBusinessDate(toastOrder.businessDate),
+		closedDate: toastOrder.closedDate || null,
 		orderSource: toastOrder.source || "POS",
-		orderType: toastOrder.diningOption?.name || "Dine In",
+		// Toast returns only the dining option's GUID here, not its name.
+		orderType: null,
 		status: normalizeOrderStatus(toastOrder),
-		subtotal,
-		tax,
-		total,
+		subtotal: roundMoney(subtotal),
+		tax: roundMoney(tax),
+		total: roundMoney(total),
 		lineItems,
 		voided: toastOrder.voided || false,
 		deleted: toastOrder.deleted || false,
 		rawData: toastOrder, // Store original for debugging
 	};
+}
+
+function roundMoney(value) {
+	return Math.round(value * 100) / 100;
 }
 
 /**
@@ -222,35 +231,13 @@ function normalizeOrderStatus(order) {
 
 /**
  * Get orders modified since a timestamp (for incremental sync)
- * @param {object} credentials - Toast API credentials
+ * @param {object} credentials - Toast credentials
  * @param {string} since - ISO timestamp
  * @returns {Promise<Array>} Modified orders
  */
 export async function fetchToastOrdersSince(credentials, since) {
-	const { restaurantGuid, accessToken, apiUrl } = credentials;
-
-	const baseUrl =
-		apiUrl || process.env.TOAST_API_URL || "https://ws-api.toasttab.com";
-
-	try {
-		const response = await axios.get(
-			`${baseUrl}/orders/v2/ordersBulk`,
-			{
-				headers: {
-					Authorization: `Bearer ${accessToken}`,
-					"Toast-Restaurant-External-ID": restaurantGuid,
-					"Content-Type": "application/json",
-				},
-				params: {
-					startDate: since,
-					endDate: new Date().toISOString(),
-				},
-			}
-		);
-
-		return (response.data.orders || []).map(normalizeToastOrder);
-	} catch (error) {
-		console.error("Error fetching Toast orders since timestamp:", error);
-		throw new Error(`Failed to fetch orders: ${error.message}`);
-	}
+	return fetchAllToastOrders(credentials, {
+		startDate: since,
+		endDate: new Date().toISOString(),
+	});
 }

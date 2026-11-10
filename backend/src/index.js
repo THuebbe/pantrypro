@@ -30,6 +30,7 @@ import vendorPaymentsAPRoutes from "./routes/vendorPaymentsAP.js";
 import posImportRoutes from "./routes/posImportRoutes.js";
 import salesRoutes from "./routes/salesRoutes.js";
 import deductionRoutes from "./routes/deductionRoutes.js";
+import { startSalesProcessingJob } from "./jobs/salesProcessingJob.js";
 // Load environment variables
 
 // Initialize Express app
@@ -111,4 +112,10 @@ app.listen(PORT, () => {
 	);
 	console.log(`🔄 Server started at: ${new Date().toISOString()}`);
 	console.log(`⚠️  TESTING: If you see this, nodemon reloaded the server`);
+
+	// Pull sales from connected POS systems and deduct inventory on a timer.
+	// Set POS_SYNC_ENABLED=false to turn this off (e.g. on a second instance).
+	if (process.env.POS_SYNC_ENABLED !== "false") {
+		startSalesProcessingJob();
+	}
 });

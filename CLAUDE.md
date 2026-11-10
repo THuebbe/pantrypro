@@ -191,6 +191,7 @@ Backend `.env`:
 SUPABASE_URL=your_supabase_url
 SUPABASE_SERVICE_KEY=your_supabase_service_key
 PORT=3001
+POS_CREDENTIALS_KEY=64_hex_chars   # encrypts stored POS credentials; see backend/.env.example
 ```
 
 ## Testing Strategy
@@ -198,4 +199,4 @@ PORT=3001
 - Backend: Manual testing with API endpoints
 - Frontend: Component tests with Vitest
 - Integration: End-to-end workflow testing
-- Coverage: Focused on business logic and user interactions
+- Coverage: Focused on business logic and user interactions
