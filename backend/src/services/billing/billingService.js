@@ -181,6 +181,9 @@ export async function createCheckoutSession({ businessId, email, stripe }) {
 		line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
 		// Take the card now, even though nothing is charged during the trial.
 		payment_method_collection: "always",
+		// Shows a "promotion code" box on Stripe's page. Codes and what they
+		// discount are created in the Stripe dashboard, not here.
+		allow_promotion_codes: true,
 		subscription_data: subscriptionData,
 		success_url: `${frontendUrl()}/settings/billing?checkout=success`,
 		cancel_url: `${frontendUrl()}/settings/billing?checkout=cancelled`,
