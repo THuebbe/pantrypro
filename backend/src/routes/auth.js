@@ -104,11 +104,13 @@ router.get("/me", async (req, res) => {
 // PUT /api/auth/me
 router.put("/me", async (req, res) => {
 	try {
-		console.log("📝 Update request received");
-		console.log("User ID from token:", req.user?.id);
-		console.log("Updates from body:", req.body);
+		// A user may change their own name, email and password here.
+		// Role and business are never taken from the request: accepting
+		// them would let anyone promote themselves or move into another
+		// restaurant's account.
+		const { firstName, lastName, email, password } = req.body || {};
+		const updates = { firstName, lastName, email, password };
 
-		const updates = req.body;
 		const result = await updateUser(req.user.id, updates);
 
 		res.json(result);
