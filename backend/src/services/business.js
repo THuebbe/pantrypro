@@ -11,6 +11,31 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function createBusiness(businessData, userId) {
 	try {
+		if (!businessData.name || !businessData.name.trim()) {
+			throw new Error("Business name is required");
+		}
+
+		businessData = {
+			name: businessData.name,
+			domain: businessData.domain || "",
+			address: businessData.address || "",
+			city: businessData.city || "",
+		};
+
+		// One business per account: a second one would orphan the first.
+		const { data: owner, error: ownerError } = await supabase
+			.from("users")
+			.select("business_id")
+			.eq("id", userId)
+			.single();
+
+		if (ownerError) {
+			throw new Error(`User lookup failed: ${ownerError.message}`);
+		}
+		if (owner.business_id) {
+			throw new Error("This account already has a business registered");
+		}
+
 		let slug = generateSlug(businessData.name);
 
 		const { data: existingBusiness } = await supabase
@@ -56,20 +81,42 @@ export async function createBusiness(businessData, userId) {
 
 		if (error) throw new Error(`Business creation failed: ${error.message}`);
 
+		// Every screen in the app works on the restaurant record, so it is
+		// created here with the business. If any later step fails, undo the
+		// earlier ones so the owner can simply try again.
+		const { data: restaurant, error: restaurantError } = await supabase
+			.from("restaurants")
+			.insert({
+				business_id: data.id,
+				business_name: data.name,
+				address: data.address,
+				city: data.city,
+			})
+			.select("id")
+			.single();
+
+		if (restaurantError) {
+			await supabase.from("businesses").delete().eq("id", data.id);
+			throw new Error(`Restaurant creation failed: ${restaurantError.message}`);
+		}
+
 		const { error: userUpdateError } = await supabase
 			.from("users")
 			.update({
-				businessId: data.id,
-				updatedAt: new Date().toISOString(),
+				business_id: data.id,
+				updated_at: new Date().toISOString(),
 			})
 			.eq("id", userId);
 
 		if (userUpdateError) {
+			await supabase.from("restaurants").delete().eq("id", restaurant.id);
+			await supabase.from("businesses").delete().eq("id", data.id);
 			throw new Error(`User update failed: ${userUpdateError.message}`);
 		}
 
 		return {
 			business: data,
+			restaurantId: restaurant.id,
 			message: "Business successfully registered",
 		};
 	} catch (error) {

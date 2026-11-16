@@ -9,8 +9,35 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// Signing a user in stores that user's session on the client that did it.
+// Sign-ins go through this separate client so the admin client above keeps
+// its service-level access for database work.
+const authClient = createClient(supabaseUrl, supabaseServiceKey, {
+	auth: { persistSession: false, autoRefreshToken: false },
+});
+
 console.log("Supabase URL:", supabaseUrl);
 console.log("Service Key loaded:", supabaseServiceKey ? "Yes" : "No");
+
+/**
+ * The users table stores snake_case columns (first_name, business_id).
+ * The rest of the app reads camelCase (firstName, businessId). This adds
+ * the camelCase names to a row so both spellings work.
+ * @param {object|null} row - Row from the users table
+ * @returns {object|null}
+ */
+export function toUserDetails(row) {
+	if (!row) return row;
+
+	return {
+		...row,
+		firstName: row.first_name ?? null,
+		lastName: row.last_name ?? null,
+		businessId: row.business_id ?? null,
+		createdAt: row.created_at ?? null,
+		updatedAt: row.updated_at ?? null,
+	};
+}
 
 export async function registerUser(email, password, metadata) {
 	try {
@@ -27,24 +54,28 @@ export async function registerUser(email, password, metadata) {
 
 		if (error) throw new Error(`Auth creation failed: ${error.message}`);
 
-		// Step 2: Insert into users table - using camelCase to match schema
+		// Step 2: Insert into users table (snake_case columns)
 		const { error: dbError } = await supabase.from("users").insert({
 			id: data.user.id,
 			email: data.user.email,
-			firstName: metadata.firstName,
-			lastName: metadata.lastName,
+			first_name: metadata.firstName || null,
+			last_name: metadata.lastName || null,
 			role: metadata.role || "MANAGER",
-			businessId: metadata.businessId || null,
-			createdAt: new Date().toISOString(),
-			updatedAt: new Date().toISOString(),
+			business_id: metadata.businessId || null,
+			created_at: new Date().toISOString(),
+			updated_at: new Date().toISOString(),
 		});
 
-		if (dbError)
+		if (dbError) {
+			// Don't leave a login behind that has no user record: the email
+			// would be taken and the person could never finish signing up.
+			await supabase.auth.admin.deleteUser(data.user.id);
 			throw new Error(`Database user creation failed: ${dbError.message}`);
+		}
 
 		// Step 3: Sign the user in to get a session/token
 		const { data: sessionData, error: signInError } =
-			await supabase.auth.signInWithPassword({
+			await authClient.auth.signInWithPassword({
 				email: email,
 				password: password,
 			});
@@ -64,7 +95,7 @@ export async function registerUser(email, password, metadata) {
 		return {
 			user: sessionData.user,
 			session: sessionData.session,
-			userDetails: userDetails,
+			userDetails: toUserDetails(userDetails),
 			accessToken: sessionData.session.access_token,
 			refreshToken: sessionData.session.refresh_token,
 			expiresAt: sessionData.session.expires_at,
@@ -77,7 +108,7 @@ export async function registerUser(email, password, metadata) {
 
 export async function loginUser(email, password) {
 	try {
-		const { data, error } = await supabase.auth.signInWithPassword({
+		const { data, error } = await authClient.auth.signInWithPassword({
 			email: email,
 			password: password,
 		});
@@ -99,7 +130,7 @@ export async function loginUser(email, password) {
 		return {
 			user: data.user,
 			session: data.session,
-			userDetails: userData,
+			userDetails: toUserDetails(userData),
 			accessToken: data.session.access_token,
 			refreshToken: data.session.refresh_token,
 			expiresAt: data.session.expires_at,
@@ -115,7 +146,7 @@ export async function refreshSession(refreshToken) {
 			throw new Error("No refresh token provided");
 		}
 
-		const { data, error } = await supabase.auth.refreshSession({
+		const { data, error } = await authClient.auth.refreshSession({
 			refresh_token: refreshToken,
 		});
 
@@ -137,7 +168,7 @@ export async function refreshSession(refreshToken) {
 		return {
 			user: data.user,
 			session: data.session,
-			userDetails: userData,
+			userDetails: toUserDetails(userData),
 			accessToken: data.session.access_token,
 			refreshToken: data.session.refresh_token,
 			expiresAt: data.session.expires_at,
@@ -174,8 +205,8 @@ export async function verifyToken(token) {
 
 		return {
 			user: data.user,
-			userDetails: userData,
-			businessId: userData.businessId, // camelCase
+			userDetails: toUserDetails(userData),
+			businessId: userData.business_id,
 			role: userData.role,
 		};
 	} catch (error) {
@@ -243,16 +274,17 @@ export async function updateUser(userId, updates) {
 			}
 		}
 
-		// Update users table (camelCase columns)
+		// Update users table (snake_case columns). Only fields that were
+		// sent are changed, so a name edit can't blank out the business link.
+		const changes = { updated_at: new Date().toISOString() };
+		if (updates.firstName !== undefined) changes.first_name = updates.firstName;
+		if (updates.lastName !== undefined) changes.last_name = updates.lastName;
+		if (updates.role !== undefined) changes.role = updates.role;
+		if (updates.businessId !== undefined) changes.business_id = updates.businessId;
+
 		const { data, error } = await supabase
 			.from("users")
-			.update({
-				firstName: updates.firstName,
-				lastName: updates.lastName,
-				role: updates.role,
-				businessId: updates.businessId,
-				updatedAt: new Date().toISOString(),
-			})
+			.update(changes)
 			.eq("id", userId)
 			.select()
 			.single();
@@ -261,7 +293,7 @@ export async function updateUser(userId, updates) {
 			throw new Error(`User update failed: ${error.message}`);
 		}
 
-		return data;
+		return toUserDetails(data);
 	} catch (error) {
 		throw error;
 	}
