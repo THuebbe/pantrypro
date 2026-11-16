@@ -10,6 +10,7 @@ import {
 	CheckCircle,
 	Trash2,
 	Edit2,
+	Sparkles,
 } from "lucide-react";
 import { useMenuItem } from "../../hooks/useMenuItems";
 import {
@@ -17,10 +18,13 @@ import {
 	useRecipeCost,
 	useRecipeValidation,
 	useDeleteRecipeIngredient,
+	useDraftRecipe,
+	useSaveRecipe,
 } from "../../hooks/useRecipes";
 import Modal from "../shared/Modal";
 import AddIngredientForm from "./AddIngredientForm";
 import EditIngredientForm from "./EditIngredientForm";
+import RecipeDraftReview from "./RecipeDraftReview";
 
 export default function RecipeBuilder() {
 	const location = useLocation();
@@ -32,6 +36,8 @@ export default function RecipeBuilder() {
 	const [showAddModal, setShowAddModal] = useState(false);
 	const [editingIngredient, setEditingIngredient] = useState(null);
 	const [showValidation, setShowValidation] = useState(false);
+	const [draft, setDraft] = useState(null);
+	const [draftError, setDraftError] = useState("");
 
 	// Fetch data
 	const { data: menuItem, isLoading: menuItemLoading } =
@@ -42,6 +48,36 @@ export default function RecipeBuilder() {
 
 	// Mutations
 	const deleteIngredientMutation = useDeleteRecipeIngredient();
+	const draftRecipeMutation = useDraftRecipe();
+	const saveRecipeMutation = useSaveRecipe();
+
+	const handleDraftRecipe = async () => {
+		setDraftError("");
+
+		try {
+			const result = await draftRecipeMutation.mutateAsync({ menuItemId });
+			setDraft(result);
+		} catch (error) {
+			setDraftError(
+				error.response?.data?.error ||
+					"Couldn't draft a recipe right now. You can still add ingredients by hand."
+			);
+		}
+	};
+
+	const handleSaveDraft = async (ingredients) => {
+		try {
+			await saveRecipeMutation.mutateAsync({ menuItemId, ingredients });
+			setDraft(null);
+		} catch {
+			// The review screen shows saveRecipeMutation.error
+		}
+	};
+
+	const handleCloseDraft = () => {
+		setDraft(null);
+		saveRecipeMutation.reset();
+	};
 
 	const handleAddIngredientSuccess = () => {
 		setShowAddModal(false);
@@ -136,13 +172,30 @@ export default function RecipeBuilder() {
 						</div>
 					</div>
 
-					<button
-						onClick={() => setShowAddModal(true)}
-						className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-					>
-						<Plus size={20} />
-						Add Ingredient
-					</button>
+					<div className="flex flex-col items-end gap-2">
+						<div className="flex items-center gap-2">
+							<button
+								onClick={handleDraftRecipe}
+								disabled={draftRecipeMutation.isPending}
+								className="flex items-center gap-2 px-4 py-2 border border-green-600 text-green-700 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+							>
+								<Sparkles size={20} />
+								{draftRecipeMutation.isPending ? "Drafting..." : "Draft with AI"}
+							</button>
+							<button
+								onClick={() => setShowAddModal(true)}
+								className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+							>
+								<Plus size={20} />
+								Add Ingredient
+							</button>
+						</div>
+						{draftError && (
+							<p className="text-sm text-red-600 max-w-sm text-right">
+								{draftError}
+							</p>
+						)}
+					</div>
 				</div>
 
 				{/* Cost Summary Card */}
@@ -311,6 +364,30 @@ export default function RecipeBuilder() {
 					onSuccess={handleAddIngredientSuccess}
 					onCancel={() => setShowAddModal(false)}
 				/>
+			</Modal>
+
+			{/* AI Draft Review Modal */}
+			<Modal
+				isOpen={!!draft}
+				onClose={handleCloseDraft}
+				title="Review drafted recipe"
+				size="lg"
+			>
+				{draft && (
+					<RecipeDraftReview
+						draft={draft}
+						hasExistingRecipe={(recipe?.ingredients?.length || 0) > 0}
+						isSaving={saveRecipeMutation.isPending}
+						saveError={
+							saveRecipeMutation.error
+								? saveRecipeMutation.error.response?.data?.error ||
+								  "Couldn't save the recipe. Try again."
+								: ""
+						}
+						onSave={handleSaveDraft}
+						onCancel={handleCloseDraft}
+					/>
+				)}
 			</Modal>
 
 			{/* Edit Ingredient Modal */}

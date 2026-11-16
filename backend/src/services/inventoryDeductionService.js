@@ -98,7 +98,9 @@ export async function deductInventoryForSale(restaurantId, saleId) {
 				const quantitySold = lineItem.quantity || 1;
 				const recipeQty = parseFloat(recipe.quantity) || 0;
 				const prepLossFactor = parseFloat(recipe.prep_loss_factor || 0);
-				const totalDeduction = recipeQty * quantitySold * (1 + prepLossFactor);
+				// Prep loss is stored as a percentage (5 means 5%).
+				const totalDeduction =
+					recipeQty * quantitySold * (1 + prepLossFactor / 100);
 
 				if (totalDeduction <= 0) continue;
 
@@ -120,8 +122,13 @@ export async function deductInventoryForSale(restaurantId, saleId) {
 							menu_item_id: lineItem.menu_item_id,
 							ingredient_id: recipe.ingredient_id,
 							inventory_id: result.inventoryId,
-							quantity_deducted: totalDeduction,
-							unit: recipe.unit || recipe.ingredient_library?.unit,
+							// Logged in the inventory item's unit so a reversal
+							// puts back exactly what was taken out.
+							quantity_deducted: result.deductedQuantity,
+							unit:
+								result.inventoryUnit ||
+								recipe.unit ||
+								recipe.ingredient_library?.unit,
 							reason: "sale",
 							deducted_at: new Date().toISOString(),
 						})
@@ -136,8 +143,11 @@ export async function deductInventoryForSale(restaurantId, saleId) {
 						ingredientId: recipe.ingredient_id,
 						ingredientName: recipe.ingredient_library?.name || "Unknown",
 						menuItem: lineItem.name,
-						quantityDeducted: totalDeduction,
-						unit: recipe.unit || recipe.ingredient_library?.unit,
+						quantityDeducted: result.deductedQuantity,
+						unit:
+							result.inventoryUnit ||
+							recipe.unit ||
+							recipe.ingredient_library?.unit,
 						previousQuantity: result.previousQuantity,
 						newQuantity: result.newQuantity,
 						wentNegative: result.wentNegative,
@@ -147,7 +157,7 @@ export async function deductInventoryForSale(restaurantId, saleId) {
 						warnings.push({
 							item: recipe.ingredient_library?.name || "Unknown",
 							warning: `Inventory went to zero (would need ${Math.abs(
-								result.previousQuantity - totalDeduction
+								result.previousQuantity - result.deductedQuantity
 							).toFixed(2)} more)`,
 						});
 					}

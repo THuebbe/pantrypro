@@ -5,6 +5,10 @@ import { requireAuth } from "../middleware/auth.js";
 import { supabase } from "../services/supabase.js";
 import { getMenuItem } from "../services/menuItemService.js";
 import {
+	draftRecipe,
+	RecipeDraftError,
+} from "../services/recipeDrafts/recipeDraftService.js";
+import {
 	getRecipe,
 	createOrUpdateRecipe,
 	addIngredientToRecipe,
@@ -169,6 +173,51 @@ router.post("/:menuItemId", async (req, res) => {
 		}
 
 		res.status(500).json({ error: error.message });
+	}
+});
+
+/**
+ * POST /api/recipes/:menuItemId/draft
+ * Ask the AI to propose a recipe for this menu item, using only the
+ * restaurant's own inventory items. Returns a draft for the owner to
+ * review. Nothing is saved; saving goes through POST /api/recipes/:menuItemId.
+ */
+router.post("/:menuItemId/draft", async (req, res) => {
+	try {
+		const { menuItemId } = req.params;
+
+		const businessId = req.userDetails?.businessId;
+		const restaurantId = await getRestaurantId(businessId);
+
+		let menuItem;
+		try {
+			menuItem = await getMenuItem(menuItemId);
+		} catch (lookupError) {
+			menuItem = null;
+		}
+
+		if (!menuItem || menuItem.restaurant_id !== restaurantId) {
+			return res.status(403).json({ error: "Access denied" });
+		}
+
+		const draft = await draftRecipe({ menuItem, restaurantId });
+
+		res.json(draft);
+	} catch (error) {
+		if (error instanceof RecipeDraftError) {
+			return res.status(error.status).json({ error: error.message });
+		}
+
+		console.error(
+			`Error in POST /api/recipes/${req.params.menuItemId}/draft:`,
+			error
+		);
+
+		if (error.message.includes("No restaurant found")) {
+			return res.status(404).json({ error: error.message });
+		}
+
+		res.status(500).json({ error: "Couldn't draft a recipe right now" });
 	}
 });
 

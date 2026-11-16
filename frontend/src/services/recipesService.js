@@ -22,6 +22,16 @@ export async function saveRecipe(menuItemId, ingredients) {
 }
 
 /**
+ * Ask the AI to draft a recipe from the restaurant's inventory items.
+ * Returns a draft to review; nothing is saved.
+ * @param {string} menuItemId - Menu item ID
+ */
+export async function draftRecipe(menuItemId) {
+	const response = await api.post(`/recipes/${menuItemId}/draft`);
+	return response.data;
+}
+
+/**
  * Add single ingredient to recipe
  * @param {string} menuItemId - Menu item ID
  * @param {Object} ingredient - Ingredient data

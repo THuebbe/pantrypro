@@ -1,6 +1,7 @@
 // /backend/src/services/inventory.js
 
 import { supabase } from "./supabase.js";
+import { convertQuantity, normalizeUnit } from "./units.js";
 
 /**
  * Get all inventory items for a restaurant
@@ -349,7 +350,23 @@ export async function deductIngredient(restaurantId, ingredientId, quantity, uni
 		}
 
 		const currentQuantity = parseFloat(existing.quantity);
-		const deductQuantity = parseFloat(quantity);
+
+		// The amount arrives in the recipe's unit (6 oz) and stock is counted
+		// in the inventory item's unit (lbs), so convert before subtracting.
+		let deductQuantity = parseFloat(quantity);
+
+		if (unit && existing.unit && normalizeUnit(unit) !== normalizeUnit(existing.unit)) {
+			const converted = convertQuantity(deductQuantity, unit, existing.unit);
+
+			if (converted === null) {
+				throw new Error(
+					`Recipe uses ${unit} but this item is counted in ${existing.unit}; the two can't be converted`
+				);
+			}
+
+			deductQuantity = converted;
+		}
+
 		const newQuantity = Math.max(0, currentQuantity - deductQuantity);
 
 		const now = new Date().toISOString();
@@ -370,6 +387,7 @@ export async function deductIngredient(restaurantId, ingredientId, quantity, uni
 			ingredientId,
 			previousQuantity: currentQuantity,
 			deductedQuantity: deductQuantity,
+			inventoryUnit: existing.unit,
 			newQuantity: parseFloat(updated.quantity),
 			wentNegative: currentQuantity - deductQuantity < 0,
 		};
