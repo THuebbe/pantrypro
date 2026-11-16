@@ -13,8 +13,27 @@
  */
 
 import { supabase } from "../services/supabase.js";
+import { isEncrypted } from "../services/credentialVault.js";
 import { syncSalesFromPOS } from "../services/salesDataService.js";
 import { processUndeductedSales } from "../services/inventoryDeductionService.js";
+
+// POS systems that syncSalesFromPOS can read sales from
+const SYNC_SUPPORTED_POS = ["toast"];
+
+/**
+ * Check whether stored POS credentials are complete enough to try a sync
+ * @param {object} stored - restaurants.pos_integration_data
+ * @returns {boolean}
+ */
+export function hasUsableCredentials(stored) {
+	if (!stored || typeof stored !== "object") return false;
+
+	// Encrypted credentials were validated when they were saved.
+	if (isEncrypted(stored)) return true;
+
+	// Rows saved before encryption was added
+	return Boolean(stored.restaurantGuid && stored.clientId && stored.clientSecret);
+}
 
 let syncIntervalId = null;
 let isRunning = false;
@@ -73,11 +92,11 @@ async function runSalesProcessingCycle() {
 	try {
 		console.log(`[SalesJob] Starting cycle at ${new Date().toISOString()}`);
 
-		// Get all restaurants with POS configured
-		const { data: restaurants, error } = await supabase
+		// Get restaurants on a POS that sales sync supports
+		const { data: configured, error } = await supabase
 			.from("restaurants")
-			.select("id, pos_system, last_pos_sync")
-			.not("pos_system", "is", null)
+			.select("id, pos_system, last_pos_sync, pos_integration_data")
+			.in("pos_system", SYNC_SUPPORTED_POS)
 			.not("pos_integration_data", "is", null);
 
 		if (error) {
@@ -85,8 +104,14 @@ async function runSalesProcessingCycle() {
 			return;
 		}
 
-		if (!restaurants || restaurants.length === 0) {
-			console.log("[SalesJob] No restaurants with POS configured");
+		// Leave out restaurants that picked a POS but never finished
+		// connecting it, so they don't fail on every cycle.
+		const restaurants = (configured || []).filter((restaurant) =>
+			hasUsableCredentials(restaurant.pos_integration_data)
+		);
+
+		if (restaurants.length === 0) {
+			console.log("[SalesJob] No restaurants with POS connected");
 			return;
 		}
 
