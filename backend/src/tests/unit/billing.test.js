@@ -344,6 +344,7 @@ test("a first-time subscriber gets a card-required checkout with the free trial"
 	assert.equal(session.client_reference_id, "biz-1");
 	assert.deepEqual(session.line_items, [{ price: "price_123", quantity: 1 }]);
 	assert.equal(session.payment_method_collection, "always");
+	assert.equal(session.allow_promotion_codes, true);
 	assert.equal(session.subscription_data.trial_period_days, TRIAL_DAYS);
 	assert.deepEqual(session.subscription_data.metadata, { business_id: "biz-1" });
 	assert.equal(session.success_url, "https://app.example.com/settings/billing?checkout=success");
