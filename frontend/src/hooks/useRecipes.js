@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
 	fetchRecipe,
 	saveRecipe,
+	draftRecipe,
 	addRecipeIngredient,
 	updateRecipeIngredient,
 	deleteRecipeIngredient,
@@ -44,6 +45,15 @@ export function useRecipeValidation(menuItemId) {
 		queryFn: () => validateRecipe(menuItemId),
 		enabled: !!menuItemId,
 		staleTime: 1000 * 30, // Fresh for 30 seconds
+	});
+}
+
+/**
+ * Draft a recipe with AI (returns a draft to review, saves nothing)
+ */
+export function useDraftRecipe() {
+	return useMutation({
+		mutationFn: ({ menuItemId }) => draftRecipe(menuItemId),
 	});
 }
 

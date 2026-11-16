@@ -192,6 +192,7 @@ SUPABASE_URL=your_supabase_url
 SUPABASE_SERVICE_KEY=your_supabase_service_key
 PORT=3001
 POS_CREDENTIALS_KEY=64_hex_chars   # encrypts stored POS credentials; see backend/.env.example
+ANTHROPIC_API_KEY=your_key          # recipe drafts; see backend/src/services/recipeDrafts/CONTRACT.md
 ```
 
 ## Testing Strategy

@@ -1,6 +1,7 @@
 // /backend/src/services/recipeService.js
 
 import { supabase } from "./supabase.js";
+import { convertQuantity } from "./units.js";
 
 /**
  * Get recipe for a menu item
@@ -314,7 +315,7 @@ export async function calculateRecipeCost(menuItemId, restaurantId) {
 		for (const ri of recipeIngredients) {
 			const { data: inventoryItem } = await supabase
 				.from("restaurant_inventory")
-				.select("cost_per_unit, quantity")
+				.select("cost_per_unit, quantity, unit")
 				.eq("restaurant_id", restaurantId)
 				.eq("ingredient_id", ri.ingredient_id)
 				.single();
@@ -326,7 +327,23 @@ export async function calculateRecipeCost(menuItemId, restaurantId) {
 
 			// Calculate adjusted quantity with prep loss
 			const adjustedQuantity = quantity * (1 + prepLossFactor / 100);
-			const ingredientCost = adjustedQuantity * costPerUnit;
+
+			// Cost is per inventory unit (per lb), so convert the recipe
+			// amount (oz) into that unit before pricing it.
+			const inventoryUnit = inventoryItem?.unit || ri.unit;
+			const quantityInInventoryUnit = convertQuantity(
+				adjustedQuantity,
+				ri.unit,
+				inventoryUnit
+			);
+
+			if (quantityInInventoryUnit === null) {
+				warnings.push(
+					`${ri.ingredient_library.name} is in ${ri.unit} on the recipe but counted in ${inventoryUnit} in inventory - it can't be costed or deducted until the units match`
+				);
+			}
+
+			const ingredientCost = (quantityInInventoryUnit ?? 0) * costPerUnit;
 
 			totalCost += ingredientCost;
 
