@@ -12,8 +12,27 @@ import VendorsContent from "../vendor-erp/VendorsContent";
 import RecipesContent from "./content/RecipesContent";
 import SettingsContent from "./content/SettingsContent";
 import SalesContent from "./content/SalesContent";
+import BillingBanner from "../shared/BillingBanner";
+import { useBillingNotice } from "../../hooks/useBilling";
 
 export default function MainContent() {
+	const notice = useBillingNotice();
+
+	// Nearly always there is nothing to show, and the page renders exactly
+	// as before. The wrapper only exists while a billing notice is up.
+	if (!notice) return <MainContentBody />;
+
+	return (
+		<div className="h-full flex flex-col">
+			<BillingBanner notice={notice} />
+			<div className="flex-1 min-h-0">
+				<MainContentBody />
+			</div>
+		</div>
+	);
+}
+
+function MainContentBody() {
 	const location = useLocation();
 	const pathParts = location.pathname.split("/").filter(Boolean);
 

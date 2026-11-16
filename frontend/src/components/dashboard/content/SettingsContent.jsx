@@ -4,13 +4,16 @@
 import { useNavigate } from "react-router-dom";
 import IntegrationsSettings from "../../settings/IntegrationsSettings";
 import POSSyncStatus from "../../settings/POSSyncStatus";
-import { Settings, Plug, Bell, User } from "lucide-react";
+import BillingSettings from "../../settings/BillingSettings";
+import { Settings, Plug, Bell, User, CreditCard } from "lucide-react";
 
 export default function SettingsContent({ subsection, params }) {
 	// Route to specific settings component based on subsection
 	switch (subsection) {
 		case "integrations":
 			return <IntegrationsSettings params={params} />;
+		case "billing":
+			return <BillingSettings params={params} />;
 		default:
 			return <SettingsOverview />;
 	}
@@ -32,6 +35,13 @@ function SettingsOverview() {
 					icon={Plug}
 					path="/settings/integrations"
 					color="blue"
+				/>
+				<SettingsCard
+					title="Billing"
+					description="Your subscription, card and receipts"
+					icon={CreditCard}
+					path="/settings/billing"
+					color="green"
 				/>
 			</div>
 

@@ -131,6 +131,7 @@ export const menuItems = [
 		path: "/settings",
 		subItems: [
 			{ id: "integrations", label: "Integrations", path: "/settings/integrations" },
+			{ id: "billing", label: "Billing", path: "/settings/billing" },
 		],
 	},
 ];
