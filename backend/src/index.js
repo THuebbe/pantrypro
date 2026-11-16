@@ -30,6 +30,7 @@ import vendorPaymentsAPRoutes from "./routes/vendorPaymentsAP.js";
 import posImportRoutes from "./routes/posImportRoutes.js";
 import salesRoutes from "./routes/salesRoutes.js";
 import deductionRoutes from "./routes/deductionRoutes.js";
+import billingRoutes, { stripeWebhookHandler } from "./routes/billingRoutes.js";
 import { startSalesProcessingJob } from "./jobs/salesProcessingJob.js";
 // Load environment variables
 
@@ -47,6 +48,15 @@ app.use(
 		credentials: true,
 	})
 );
+
+// Stripe signs the exact bytes it sends, so its webhook must read the raw
+// body. This has to be registered before express.json() parses it.
+app.post(
+	"/api/billing/webhook",
+	express.raw({ type: "application/json" }),
+	stripeWebhookHandler
+);
+
 app.use(express.json());
 
 // Test route to make sure server is working
@@ -83,6 +93,7 @@ app.use("/api/vendors", vendorPaymentsAPRoutes);
 app.use("/api/pos-import", posImportRoutes);
 app.use("/api/sales", salesRoutes);
 app.use("/api/deductions", deductionRoutes);
+app.use("/api/billing", billingRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

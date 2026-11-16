@@ -1,6 +1,7 @@
 // /backend/src/middleware
 
 import { verifyToken } from "../services/auth.js";
+import { checkBillingAccess } from "./billingGate.js";
 
 export async function requireAuth(req, res, next) {
 	try {
@@ -18,11 +19,22 @@ export async function requireAuth(req, res, next) {
 		req.userDetails = authData.userDetails;
 		req.businessId = authData.businessId;
 		req.userRole = authData.role;
-
-		next(); // Continue to the route handler
 	} catch (error) {
 		return res.status(401).json({ error: error.message });
 	}
+
+	// Signed in. Now check the business may make changes (see billingGate.js).
+	try {
+		const blocked = await checkBillingAccess(req);
+
+		if (blocked) {
+			return res.status(blocked.status).json(blocked.body);
+		}
+	} catch (error) {
+		console.error("[Billing] Access check failed:", error.message);
+	}
+
+	next(); // Continue to the route handler
 }
 
 export function requireRole(allowedRoles) {
