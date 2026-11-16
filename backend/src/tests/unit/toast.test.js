@@ -361,3 +361,22 @@ test("a sync window longer than 31 days is refused", async () => {
 		/at most 31 days/
 	);
 });
+
+// ---------------------------------------------------------------------------
+// Sync job: which restaurants are attempted
+// ---------------------------------------------------------------------------
+
+test("the sync job skips restaurants without complete credentials", async () => {
+	process.env.SUPABASE_URL ||= "https://example.supabase.co";
+	process.env.SUPABASE_SERVICE_KEY ||= "test";
+	process.env.SUPABASE_ANON_KEY ||= "test";
+	process.env.POS_CREDENTIALS_KEY = KEY;
+
+	const { hasUsableCredentials } = await import("../../jobs/salesProcessingJob.js");
+
+	assert.equal(hasUsableCredentials(null), false);
+	assert.equal(hasUsableCredentials({}), false);
+	assert.equal(hasUsableCredentials({ restaurantGuid: "x" }), false);
+	assert.equal(hasUsableCredentials(CREDENTIALS), true);
+	assert.equal(hasUsableCredentials(encryptCredentials(CREDENTIALS)), true);
+});
