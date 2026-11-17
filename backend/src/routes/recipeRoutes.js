@@ -17,6 +17,8 @@ import {
 	calculateRecipeCost,
 	validateRecipe,
 	calculateIngredientDeductions,
+	findUnitProblem,
+	getRecipeIngredientOwner,
 } from "../services/recipeService.js";
 
 const router = express.Router();
@@ -157,6 +159,15 @@ router.post("/:menuItemId", async (req, res) => {
 					error: "unit is required for all ingredients",
 				});
 			}
+
+			const unitProblem = await findUnitProblem(
+				restaurantId,
+				ingredient.ingredientId,
+				ingredient.unit
+			);
+			if (unitProblem) {
+				return res.status(400).json({ error: unitProblem });
+			}
 		}
 
 		const recipe = await createOrUpdateRecipe(menuItemId, ingredients);
@@ -259,6 +270,11 @@ router.post("/:menuItemId/ingredients", async (req, res) => {
 			return res.status(400).json({ error: "unit is required" });
 		}
 
+		const unitProblem = await findUnitProblem(restaurantId, ingredientId, unit);
+		if (unitProblem) {
+			return res.status(400).json({ error: unitProblem });
+		}
+
 		const ingredient = await addIngredientToRecipe(menuItemId, {
 			ingredientId,
 			quantity: parseFloat(quantity),
@@ -301,6 +317,32 @@ router.put("/ingredients/:recipeIngredientId", async (req, res) => {
 		const { recipeIngredientId } = req.params;
 		const { quantity, unit, prepLossFactor } = req.body;
 
+		// The row must belong to a menu item of this restaurant.
+		const restaurantId = await getRestaurantId(req.userDetails?.businessId);
+		const owner = await getRecipeIngredientOwner(recipeIngredientId);
+
+		if (!owner) {
+			return res.status(404).json({ error: "Recipe ingredient not found" });
+		}
+		if (owner.restaurantId !== restaurantId) {
+			return res.status(403).json({ error: "Access denied" });
+		}
+
+		if (quantity !== undefined && !(parseFloat(quantity) > 0)) {
+			return res.status(400).json({ error: "quantity must be greater than 0" });
+		}
+
+		if (unit !== undefined) {
+			const unitProblem = await findUnitProblem(
+				restaurantId,
+				owner.ingredientId,
+				unit
+			);
+			if (unitProblem) {
+				return res.status(400).json({ error: unitProblem });
+			}
+		}
+
 		// Build updates object
 		const updates = {};
 		if (quantity !== undefined) updates.quantity = parseFloat(quantity);
@@ -335,6 +377,17 @@ router.put("/ingredients/:recipeIngredientId", async (req, res) => {
 router.delete("/ingredients/:recipeIngredientId", async (req, res) => {
 	try {
 		const { recipeIngredientId } = req.params;
+
+		// The row must belong to a menu item of this restaurant.
+		const restaurantId = await getRestaurantId(req.userDetails?.businessId);
+		const owner = await getRecipeIngredientOwner(recipeIngredientId);
+
+		if (!owner) {
+			return res.status(404).json({ error: "Recipe ingredient not found" });
+		}
+		if (owner.restaurantId !== restaurantId) {
+			return res.status(403).json({ error: "Access denied" });
+		}
 
 		const result = await removeIngredientFromRecipe(recipeIngredientId);
 

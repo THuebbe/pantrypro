@@ -1,7 +1,58 @@
 // /backend/src/services/recipeService.js
 
 import { supabase } from "./supabase.js";
-import { convertQuantity } from "./units.js";
+import { convertQuantity, compatibleUnits } from "./units.js";
+
+/**
+ * Check that a recipe unit can be converted to the unit an ingredient is
+ * counted in. A recipe line that can't convert is never costed and never
+ * deducted, so it has to be caught when the recipe is written.
+ * @param {string} restaurantId - Restaurant UUID
+ * @param {string} ingredientId - Ingredient UUID
+ * @param {string} unit - Unit used on the recipe
+ * @returns {Promise<string|null>} A message for the owner, or null if fine
+ */
+export async function findUnitProblem(restaurantId, ingredientId, unit) {
+	const { data: stock } = await supabase
+		.from("restaurant_inventory")
+		.select("unit, ingredient:ingredient_library(name)")
+		.eq("restaurant_id", restaurantId)
+		.eq("ingredient_id", ingredientId)
+		.maybeSingle();
+
+	// Not stocked: validateRecipe reports that separately.
+	if (!stock?.unit) return null;
+
+	if (convertQuantity(1, unit, stock.unit) !== null) return null;
+
+	const name = stock.ingredient?.name || "This ingredient";
+	const options = compatibleUnits(stock.unit);
+
+	return options.length > 0
+		? `${name} is counted in ${stock.unit}, so the recipe can't use ${unit}. Choose one of: ${options.join(", ")}.`
+		: `${name} is counted in ${stock.unit}, which can't be converted to ${unit}.`;
+}
+
+/**
+ * Find which menu item a recipe ingredient row belongs to
+ * @param {string} recipeIngredientId - recipe_ingredients UUID
+ * @returns {Promise<{menuItemId: string, ingredientId: string, restaurantId: string}|null>}
+ */
+export async function getRecipeIngredientOwner(recipeIngredientId) {
+	const { data } = await supabase
+		.from("recipe_ingredients")
+		.select("menu_item_id, ingredient_id, menu_item:menu_items(restaurant_id)")
+		.eq("id", recipeIngredientId)
+		.maybeSingle();
+
+	if (!data) return null;
+
+	return {
+		menuItemId: data.menu_item_id,
+		ingredientId: data.ingredient_id,
+		restaurantId: data.menu_item?.restaurant_id || null,
+	};
+}
 
 /**
  * Get recipe for a menu item
@@ -369,6 +420,8 @@ export async function calculateRecipeCost(menuItemId, restaurantId) {
 				ingredient_cost: parseFloat(ingredientCost.toFixed(2)),
 				in_stock: currentStock > 0,
 				current_stock: currentStock,
+				inventory_unit: inventoryItem?.unit || null,
+				costed: quantityInInventoryUnit !== null && costPerUnit > 0,
 			});
 		}
 
@@ -428,22 +481,40 @@ export async function validateRecipe(menuItemId, restaurantId) {
 		const warnings = [];
 		let allIngredientsExist = true;
 		let allIngredientsInStock = true;
+		let unitsConvert = true;
 
 		// Check each ingredient
 		for (const ri of recipeIngredients) {
 			const { data: inventoryItem } = await supabase
 				.from("restaurant_inventory")
-				.select("quantity")
+				.select("quantity, unit, cost_per_unit")
 				.eq("restaurant_id", restaurantId)
 				.eq("ingredient_id", ri.ingredient_id)
-				.single();
+				.maybeSingle();
 
 			if (!inventoryItem) {
 				errors.push(
-					`${ri.ingredient_library.name} does not exist in inventory`
+					`${ri.ingredient_library.name} is not in your inventory, so it can't be tracked`
 				);
 				allIngredientsExist = false;
 			} else {
+				if (
+					inventoryItem.unit &&
+					convertQuantity(1, ri.unit, inventoryItem.unit) === null
+				) {
+					const options = compatibleUnits(inventoryItem.unit);
+					errors.push(
+						`${ri.ingredient_library.name} is in ${ri.unit} on this recipe but counted in ${inventoryItem.unit} in inventory. It isn't being costed or deducted. Change the recipe to ${options.join(", ") || inventoryItem.unit}.`
+					);
+					unitsConvert = false;
+				}
+
+				if (!(parseFloat(inventoryItem.cost_per_unit) > 0)) {
+					warnings.push(
+						`${ri.ingredient_library.name} has no cost in inventory, so it adds $0.00 to the recipe cost`
+					);
+				}
+
 				const currentStock = parseFloat(inventoryItem.quantity || 0);
 				if (currentStock === 0) {
 					warnings.push(`${ri.ingredient_library.name} is out of stock`);
@@ -453,7 +524,7 @@ export async function validateRecipe(menuItemId, restaurantId) {
 		}
 
 		return {
-			is_valid: allIngredientsExist,
+			is_valid: allIngredientsExist && unitsConvert,
 			has_recipe: true,
 			all_in_stock: allIngredientsInStock,
 			errors: errors,

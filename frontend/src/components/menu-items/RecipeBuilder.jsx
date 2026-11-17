@@ -25,6 +25,7 @@ import Modal from "../shared/Modal";
 import AddIngredientForm from "./AddIngredientForm";
 import EditIngredientForm from "./EditIngredientForm";
 import RecipeDraftReview from "./RecipeDraftReview";
+import AdjustPricingForm from "./AdjustPricingForm";
 
 export default function RecipeBuilder() {
 	const location = useLocation();
@@ -36,6 +37,7 @@ export default function RecipeBuilder() {
 	const [showAddModal, setShowAddModal] = useState(false);
 	const [editingIngredient, setEditingIngredient] = useState(null);
 	const [showValidation, setShowValidation] = useState(false);
+	const [showPricing, setShowPricing] = useState(false);
 	const [draft, setDraft] = useState(null);
 	const [draftError, setDraftError] = useState("");
 
@@ -115,9 +117,15 @@ export default function RecipeBuilder() {
 	};
 
 	const foodCostPercent =
-		menuItem && costData
+		menuItem && costData && menuItem.price > 0
 			? ((costData.total_cost / menuItem.price) * 100).toFixed(1)
 			: null;
+
+	const uncostedCount =
+		costData?.ingredients?.filter((i) => i.costed === false).length || 0;
+
+	const validationErrors = validationData?.errors || [];
+	const validationWarnings = validationData?.warnings || [];
 
 	if (menuItemLoading) {
 		return (
@@ -169,6 +177,13 @@ export default function RecipeBuilder() {
 							<span className="font-medium">
 								Menu Price: ${menuItem.price.toFixed(2)}
 							</span>
+							<button
+								onClick={() => setShowPricing(true)}
+								className="flex items-center gap-1 text-green-700 hover:text-green-800 font-medium underline"
+							>
+								<DollarSign size={14} />
+								Adjust pricing
+							</button>
 						</div>
 					</div>
 
@@ -271,17 +286,40 @@ export default function RecipeBuilder() {
 					{/* Validation Results */}
 					{showValidation && validationData && (
 						<div className="mt-4 space-y-2">
-							{validationData.is_valid ? (
-								<div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-2">
-									<CheckCircle
-										size={20}
-										className="text-green-600 flex-shrink-0"
-									/>
-									<div className="text-sm text-green-800">
-										All ingredients are available in inventory
+							{validationErrors.length === 0 &&
+								validationWarnings.length === 0 && (
+									<div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-2">
+										<CheckCircle
+											size={20}
+											className="text-green-600 flex-shrink-0"
+										/>
+										<div className="text-sm text-green-800">
+											Every ingredient is in inventory, in stock, and in a
+											unit that can be costed and deducted
+										</div>
 									</div>
+								)}
+
+							{validationErrors.length > 0 && (
+								<div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+									<div className="flex items-start gap-2 mb-2">
+										<AlertTriangle
+											size={20}
+											className="text-red-600 flex-shrink-0"
+										/>
+										<div className="text-sm font-medium text-red-800">
+											Fix these, or this recipe won&apos;t track correctly:
+										</div>
+									</div>
+									<ul className="ml-7 text-sm text-red-700 space-y-1">
+										{validationErrors.map((issue, idx) => (
+											<li key={idx}>• {issue}</li>
+										))}
+									</ul>
 								</div>
-							) : (
+							)}
+
+							{validationWarnings.length > 0 && (
 								<div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
 									<div className="flex items-start gap-2 mb-2">
 										<AlertTriangle
@@ -289,11 +327,11 @@ export default function RecipeBuilder() {
 											className="text-yellow-600 flex-shrink-0"
 										/>
 										<div className="text-sm font-medium text-yellow-800">
-											Some ingredients need attention:
+											Worth knowing:
 										</div>
 									</div>
 									<ul className="ml-7 text-sm text-yellow-700 space-y-1">
-										{validationData.issues?.map((issue, idx) => (
+										{validationWarnings.map((issue, idx) => (
 											<li key={idx}>• {issue}</li>
 										))}
 									</ul>
@@ -366,6 +404,24 @@ export default function RecipeBuilder() {
 				/>
 			</Modal>
 
+			{/* Adjust Pricing Modal */}
+			<Modal
+				isOpen={showPricing}
+				onClose={() => setShowPricing(false)}
+				title={`Adjust pricing: ${menuItem.name}`}
+				size="md"
+			>
+				{showPricing && (
+					<AdjustPricingForm
+						menuItem={menuItem}
+						recipeCost={costData?.total_cost ?? 0}
+						uncostedCount={uncostedCount}
+						onSuccess={() => setShowPricing(false)}
+						onCancel={() => setShowPricing(false)}
+					/>
+				)}
+			</Modal>
+
 			{/* AI Draft Review Modal */}
 			<Modal
 				isOpen={!!draft}
@@ -400,6 +456,11 @@ export default function RecipeBuilder() {
 				{editingIngredient && (
 					<EditIngredientForm
 						ingredient={editingIngredient}
+						inventoryUnit={
+							costData?.ingredients?.find(
+								(i) => i.ingredient_id === editingIngredient.ingredient_id
+							)?.inventory_unit
+						}
 						menuItemId={menuItemId}
 						onSuccess={handleEditIngredientSuccess}
 						onCancel={() => setEditingIngredient(null)}
