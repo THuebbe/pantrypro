@@ -2,16 +2,21 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Upload, ClipboardCheck } from "lucide-react";
 import api from "../../../core/database/api";
 import Modal from "../../shared/Modal";
 import RemoveStockForm from "../../inventory/RemoveStockForm";
 import AddInventoryItemForm from "../../inventory/AddInventoryItemForm";
+import BulkAddItems from "../../inventory/BulkAddItems";
+import CountInventory from "../../inventory/CountInventory";
 
 export default function InventoryContent({ subsection }) {
 	const [selectedItem, setSelectedItem] = useState(null);
 	const [showRemoveModal, setShowRemoveModal] = useState(false);
 	const [showAddModal, setShowAddModal] = useState(false);
+	const [showBulkModal, setShowBulkModal] = useState(false);
+	const [showCountModal, setShowCountModal] = useState(false);
+	const [countDirty, setCountDirty] = useState(false);
 	const [successMessage, setSuccessMessage] = useState("");
 
 	const {
@@ -54,6 +59,18 @@ export default function InventoryContent({ subsection }) {
 	};
 
 	const filteredInventory = getFilteredInventory();
+
+	// A count can hold a lot of typing; don't lose it to a stray tap.
+	const closeCount = () => {
+		if (
+			countDirty &&
+			!window.confirm("Close without saving? The counts you entered will be lost.")
+		) {
+			return;
+		}
+		setCountDirty(false);
+		setShowCountModal(false);
+	};
 
 	const getTitle = () => {
 		switch (subsection) {
@@ -187,10 +204,28 @@ export default function InventoryContent({ subsection }) {
 			<div className="bg-white rounded-lg border border-gray-200 p-6 flex-1 flex flex-col overflow-hidden">
 				<div className="flex items-center justify-between mb-4">
 					<h2 className="text-2xl font-bold text-gray-900">{getTitle()}</h2>
-					<div className="flex items-center gap-4">
+					<div className="flex flex-wrap items-center justify-end gap-2 sm:gap-4">
 						<p className="text-sm text-gray-500">
 							{filteredInventory.length} items
 						</p>
+						{(inventory || []).length > 0 && (
+							<button
+								type="button"
+								onClick={() => setShowCountModal(true)}
+								className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+							>
+								<ClipboardCheck size={20} />
+								Count
+							</button>
+						)}
+						<button
+							type="button"
+							onClick={() => setShowBulkModal(true)}
+							className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+						>
+							<Upload size={20} />
+							Bulk add
+						</button>
 						<button
 							type="button"
 							onClick={() => setShowAddModal(true)}
@@ -230,6 +265,16 @@ export default function InventoryContent({ subsection }) {
 									<Plus size={20} />
 									Add your first item
 								</button>
+								<p className="text-sm text-gray-500 mt-3">
+									Have a list already?{" "}
+									<button
+										type="button"
+										onClick={() => setShowBulkModal(true)}
+										className="text-green-700 font-medium hover:text-green-800"
+									>
+										Add them all from a spreadsheet
+									</button>
+								</p>
 							</div>
 						) : (
 							<p className="text-gray-500">No items found</p>
@@ -249,6 +294,37 @@ export default function InventoryContent({ subsection }) {
 					</div>
 				)}
 			</div>
+
+			{/* Bulk Add Modal */}
+			<Modal
+				isOpen={showBulkModal}
+				onClose={() => setShowBulkModal(false)}
+				title="Bulk add items"
+				size="xl"
+			>
+				{showBulkModal && (
+					<BulkAddItems onDone={() => setShowBulkModal(false)} />
+				)}
+			</Modal>
+
+			{/* Count Modal */}
+			<Modal
+				isOpen={showCountModal}
+				onClose={closeCount}
+				title="Count inventory"
+				size="lg"
+			>
+				{showCountModal && (
+					<CountInventory
+						inventory={inventory || []}
+						onDirtyChange={setCountDirty}
+						onDone={() => {
+							setCountDirty(false);
+							setShowCountModal(false);
+						}}
+					/>
+				)}
+			</Modal>
 
 			{/* Add Item Modal */}
 			<Modal
