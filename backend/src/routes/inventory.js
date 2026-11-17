@@ -17,6 +17,11 @@ import {
 	getCatalogForRestaurant,
 } from "../services/inventoryItems.js";
 import { KNOWN_UNITS } from "../services/units.js";
+import {
+	commitBulkAdd,
+	previewBulkAdd,
+	saveCount,
+} from "../services/inventoryBulk.js";
 
 const router = express.Router();
 
@@ -130,6 +135,65 @@ router.post("/items", async (req, res) => {
 
 		console.error("Add inventory item error:", error);
 		res.status(500).json({ error: "Couldn't add the item. Try again." });
+	}
+});
+
+function sendBulkError(res, error, fallback) {
+	if (error instanceof InventoryItemError) {
+		return res.status(error.status).json({ error: error.message });
+	}
+
+	console.error(`${fallback}:`, error);
+	res.status(500).json({ error: `${fallback}. Try again.` });
+}
+
+// POST /api/inventory/bulk/preview
+// Check rows for a bulk add without saving. Body: { rows: [{ name, unit,
+// quantity, costPerUnit, category, minimumQuantity, location, storageType }] }
+router.post("/bulk/preview", async (req, res) => {
+	try {
+		const restaurantId = await findRestaurantId(req.businessId);
+		res.json(await previewBulkAdd({ restaurantId, rows: req.body?.rows }));
+	} catch (error) {
+		sendBulkError(res, error, "Couldn't check those rows");
+	}
+});
+
+// POST /api/inventory/bulk/add
+// Add every row that checks out; returns the rest as skipped. Never changes
+// items the restaurant already stocks.
+router.post("/bulk/add", async (req, res) => {
+	try {
+		const restaurantId = await findRestaurantId(req.businessId);
+		const result = await commitBulkAdd({
+			restaurantId,
+			userId: req.user?.id,
+			rows: req.body?.rows,
+		});
+
+		res.status(result.added > 0 ? 201 : 200).json(result);
+	} catch (error) {
+		sendBulkError(res, error, "Couldn't add those items");
+	}
+});
+
+// POST /api/inventory/count
+// Set counted items to what was counted and record the variance.
+// Body: { reason, note, counts: [{ inventoryId, quantity }] }
+router.post("/count", async (req, res) => {
+	try {
+		const restaurantId = await findRestaurantId(req.businessId);
+		res.json(
+			await saveCount({
+				restaurantId,
+				userId: req.user?.id,
+				reason: req.body?.reason,
+				note: req.body?.note,
+				counts: req.body?.counts,
+			})
+		);
+	} catch (error) {
+		sendBulkError(res, error, "Couldn't save the count");
 	}
 });
 

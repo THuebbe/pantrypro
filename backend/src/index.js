@@ -57,7 +57,8 @@ app.post(
 	stripeWebhookHandler
 );
 
-app.use(express.json());
+// 1mb leaves room for a 500-row bulk add
+app.use(express.json({ limit: "1mb" }));
 
 // Test route to make sure server is working
 app.get("/", (req, res) => {
