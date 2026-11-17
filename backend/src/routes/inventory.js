@@ -10,6 +10,13 @@ import {
 import { requireAuth } from "../middleware/auth.js";
 import { getData } from "../services/supabase.js";
 import { supabase } from "../services/supabase.js";
+import {
+	InventoryItemError,
+	STORAGE_TYPES,
+	addInventoryItem,
+	getCatalogForRestaurant,
+} from "../services/inventoryItems.js";
+import { KNOWN_UNITS } from "../services/units.js";
 
 const router = express.Router();
 
@@ -59,6 +66,70 @@ router.get("/", async (req, res) => {
 	} catch (error) {
 		console.error("Inventory error: ", error);
 		res.status(500).json({ error: error.message });
+	}
+});
+
+/**
+ * Find the restaurant for the signed-in user's business
+ * @param {string} businessId - Business UUID
+ * @returns {Promise<string|null>} Restaurant UUID, or null if there is none
+ */
+async function findRestaurantId(businessId) {
+	if (!businessId) return null;
+
+	const { data } = await supabase
+		.from("restaurants")
+		.select("id")
+		.eq("business_id", businessId)
+		.maybeSingle();
+
+	return data?.id || null;
+}
+
+// GET /api/inventory/catalog
+// Shared catalog items this restaurant hasn't added yet, plus the choices
+// the Add item form offers.
+router.get("/catalog", async (req, res) => {
+	try {
+		const restaurantId = await findRestaurantId(req.businessId);
+
+		if (!restaurantId) {
+			return res.status(404).json({ error: "No restaurant found for this account" });
+		}
+
+		res.json({
+			items: await getCatalogForRestaurant(restaurantId),
+			units: KNOWN_UNITS,
+			storageTypes: STORAGE_TYPES,
+		});
+	} catch (error) {
+		console.error("Catalog error:", error);
+		res.status(500).json({ error: "Couldn't load the catalog. Try again." });
+	}
+});
+
+// POST /api/inventory/items
+// Add one item by hand: either { ingredientId } for a catalog item, or
+// { name, unit } for the owner's own item. Optional: category, storageType,
+// quantity, costPerUnit, minimumQuantity, location.
+router.post("/items", async (req, res) => {
+	try {
+		const restaurantId = await findRestaurantId(req.businessId);
+
+		const item = await addInventoryItem({
+			restaurantId,
+			userId: req.user?.id,
+			input: req.body,
+		});
+
+		res.status(201).json(item);
+	} catch (error) {
+		if (error instanceof InventoryItemError) {
+			return res.status(error.status).json({ error: error.message });
+		}
+
+		console.error("Add inventory item error:", error);
+		res.status(500).json({ error: "Couldn't add the item. Try again." });
 	}
 });
 

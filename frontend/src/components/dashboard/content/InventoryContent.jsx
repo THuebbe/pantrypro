@@ -2,14 +2,16 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { Trash2, Plus } from "lucide-react";
 import api from "../../../core/database/api";
 import Modal from "../../shared/Modal";
 import RemoveStockForm from "../../inventory/RemoveStockForm";
+import AddInventoryItemForm from "../../inventory/AddInventoryItemForm";
 
 export default function InventoryContent({ subsection }) {
 	const [selectedItem, setSelectedItem] = useState(null);
 	const [showRemoveModal, setShowRemoveModal] = useState(false);
+	const [showAddModal, setShowAddModal] = useState(false);
 	const [successMessage, setSuccessMessage] = useState("");
 
 	const {
@@ -185,9 +187,19 @@ export default function InventoryContent({ subsection }) {
 			<div className="bg-white rounded-lg border border-gray-200 p-6 flex-1 flex flex-col overflow-hidden">
 				<div className="flex items-center justify-between mb-4">
 					<h2 className="text-2xl font-bold text-gray-900">{getTitle()}</h2>
-					<p className="text-sm text-gray-500">
-						{filteredInventory.length} items
-					</p>
+					<div className="flex items-center gap-4">
+						<p className="text-sm text-gray-500">
+							{filteredInventory.length} items
+						</p>
+						<button
+							type="button"
+							onClick={() => setShowAddModal(true)}
+							className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+						>
+							<Plus size={20} />
+							Add item
+						</button>
+					</div>
 				</div>
 
 				{/* Success Message */}
@@ -201,7 +213,27 @@ export default function InventoryContent({ subsection }) {
 
 				{filteredInventory.length === 0 ? (
 					<div className="flex-1 flex items-center justify-center">
-						<p className="text-gray-500">No items found</p>
+						{!subsection && (inventory || []).length === 0 ? (
+							<div className="text-center">
+								<p className="text-gray-700 font-medium mb-1">
+									Your inventory is empty
+								</p>
+								<p className="text-sm text-gray-500 mb-4">
+									Add the ingredients you stock. Recipes, orders and stock
+									tracking all work from this list.
+								</p>
+								<button
+									type="button"
+									onClick={() => setShowAddModal(true)}
+									className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+								>
+									<Plus size={20} />
+									Add your first item
+								</button>
+							</div>
+						) : (
+							<p className="text-gray-500">No items found</p>
+						)}
 					</div>
 				) : (
 					<div className="overflow-y-auto flex-1">
@@ -217,6 +249,18 @@ export default function InventoryContent({ subsection }) {
 					</div>
 				)}
 			</div>
+
+			{/* Add Item Modal */}
+			<Modal
+				isOpen={showAddModal}
+				onClose={() => setShowAddModal(false)}
+				title="Add inventory item"
+				size="lg"
+			>
+				{showAddModal && (
+					<AddInventoryItemForm onDone={() => setShowAddModal(false)} />
+				)}
+			</Modal>
 
 			{/* Remove Modal */}
 			<Modal
