@@ -113,14 +113,19 @@ export async function getBillingSummary(businessId) {
 	const business = await getBillingBusiness(businessId);
 	const access = accessFor(business, { enforced: mode.enforced });
 
+	// What the screen shows is the subscription's real state. Whether that
+	// state restricts the account is a separate question, answered by
+	// `access`, and only when billing is enforced.
+	const display = accessFor(business, { enforced: true });
+
 	return {
 		configured: mode.configured,
 		enforced: mode.enforced,
 		status: business.billing_status || "none",
 		access: access.access,
-		state: access.state,
-		message: access.message,
-		graceEndsAt: access.graceEndsAt,
+		state: display.state,
+		message: mode.enforced ? access.message : "",
+		graceEndsAt: display.graceEndsAt,
 		trialEndsAt: business.trial_ends_at,
 		currentPeriodEnd: business.current_period_end,
 		trialDays: TRIAL_DAYS,

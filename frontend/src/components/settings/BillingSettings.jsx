@@ -46,22 +46,35 @@ function describe(billing) {
 				tone: "yellow",
 				icon: AlertTriangle,
 				title: "Payment didn't go through",
-				detail: `Update your card by ${formatBillingDate(billing.graceEndsAt)} to keep full access.`,
+				detail: billing.enforced
+					? `Update your card by ${formatBillingDate(billing.graceEndsAt)} to keep full access.`
+					: "Update your card to keep your subscription going.",
 			};
 		case "lapsed":
-			return {
-				tone: "red",
-				icon: AlertTriangle,
-				title: "Account is read-only",
-				detail: billing.message,
-			};
+			// Read-only only applies once billing is enforced.
+			return billing.access === "read_only"
+				? {
+						tone: "red",
+						icon: AlertTriangle,
+						title: "Account is read-only",
+						detail: billing.message,
+				  }
+				: {
+						tone: "yellow",
+						icon: AlertTriangle,
+						title: "No active subscription",
+						detail: "Your subscription has ended. Resubscribe to keep it going.",
+				  };
 		case "none":
 			return {
 				tone: "blue",
 				icon: CreditCard,
-				title: `Start your ${billing.trialDays}-day free trial`,
-				detail:
-					"Enter a card to begin. Nothing is charged during the trial, and you can cancel any time before it ends.",
+				title: billing.trialAvailable
+					? `Start your ${billing.trialDays}-day free trial`
+					: "Subscribe to PantryPro",
+				detail: billing.trialAvailable
+					? "Enter a card to begin. Nothing is charged during the trial, and you can cancel any time before it ends."
+					: "Enter a card to start your subscription.",
 			};
 		default:
 			return {

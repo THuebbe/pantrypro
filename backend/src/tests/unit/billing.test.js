@@ -528,3 +528,38 @@ test("before Stripe is set up, the summary needs no database and grants full acc
 	});
 	assert.equal(from.mock.callCount(), 0);
 });
+
+test("with enforcement off, the screen still shows the real subscription state", async (t) => {
+	const db = stubBusiness(t, {
+		id: "biz-1",
+		name: "x",
+		billing_status: "trialing",
+		stripe_customer_id: "cus_1",
+		stripe_subscription_id: "sub_1",
+		trial_ends_at: "2026-12-17T03:31:56Z",
+	});
+
+	await withEnv({ ...ENFORCED, BILLING_ENFORCED: undefined }, async () => {
+		const trialing = await getBillingSummary("biz-1");
+		assert.equal(trialing.enforced, false);
+		assert.equal(trialing.state, "trialing");
+		assert.equal(trialing.access, "full");
+		assert.equal(trialing.trialEndsAt, "2026-12-17T03:31:56Z");
+		assert.equal(trialing.canSubscribe, false);
+		assert.equal(trialing.canManage, true);
+
+		// A cancelled or never-started subscription shows as such, but
+		// nothing is restricted while enforcement is off.
+		db.row.billing_status = "canceled";
+		const ended = await getBillingSummary("biz-1");
+		assert.equal(ended.state, "lapsed");
+		assert.equal(ended.access, "full");
+		assert.equal(ended.message, "");
+		assert.equal(ended.canSubscribe, true);
+
+		db.row.billing_status = null;
+		const fresh = await getBillingSummary("biz-1");
+		assert.equal(fresh.state, "none");
+		assert.equal(fresh.access, "full");
+	});
+});

@@ -76,6 +76,21 @@ describe("BillingSettings", () => {
 		expect(screen.getByRole("button", { name: "Resubscribe" })).toBeInTheDocument();
 	});
 
+	it("shows the trial even while billing isn't enforced yet", () => {
+		show({ enforced: false, state: "trialing", access: "full", canManage: true, trialEndsAt: "2026-12-16T18:00:00Z" });
+
+		expect(screen.getByText("Free trial")).toBeInTheDocument();
+		expect(screen.getByText(/Your trial runs until 12-16-2026/)).toBeInTheDocument();
+		expect(screen.queryByText(/isn't switched on/)).not.toBeInTheDocument();
+	});
+
+	it("doesn't call an unenforced account read-only", () => {
+		show({ enforced: false, state: "lapsed", access: "full", canSubscribe: true, trialAvailable: false });
+
+		expect(screen.getByText("No active subscription")).toBeInTheDocument();
+		expect(screen.queryByText("Account is read-only")).not.toBeInTheDocument();
+	});
+
 	it("says payments aren't set up when Stripe isn't configured", () => {
 		show({ configured: false, enforced: false, state: "not_enforced", access: "full" });
 
