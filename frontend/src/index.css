@@ -4,6 +4,17 @@
 @tailwind components;
 @tailwind utilities;
 
+@media print {
+	@page {
+		size: letter;
+		margin: 0.5in;
+	}
+
+	body {
+		background: white;
+	}
+}
+
 @plugin './hero.ts';
 /* Note: You may need to change the path to fit your project structure */
 @source '../../node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}';

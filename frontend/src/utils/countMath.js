@@ -49,3 +49,72 @@ export function varianceFor(item, entered) {
 		value: Number.isFinite(cost) ? round(change * cost, 2) : null,
 	};
 }
+
+/**
+ * Put items in counting order: grouped by location (alphabetical, unplaced
+ * last), then by name. Every item gets a number from this full order, so
+ * "#14" means the same item on the printed sheet and on the Count screen,
+ * whatever is filtered out.
+ * @param {Array<object>} items - Inventory rows
+ * @returns {Array<{place: string, items: Array<object>}>}
+ */
+export function orderForCount(items = []) {
+	const byLocation = new Map();
+
+	for (const item of items) {
+		const place = item.location?.trim() || NO_LOCATION;
+		if (!byLocation.has(place)) byLocation.set(place, []);
+		byLocation.get(place).push(item);
+	}
+
+	const groups = [...byLocation.entries()]
+		.sort(([a], [b]) => {
+			if (a === NO_LOCATION) return 1;
+			if (b === NO_LOCATION) return -1;
+			return a.localeCompare(b);
+		})
+		.map(([place, placeItems]) => ({
+			place,
+			items: [...placeItems].sort((a, b) =>
+				(a.ingredient_name || "").localeCompare(b.ingredient_name || "")
+			),
+		}));
+
+	let number = 0;
+	return groups.map((group) => ({
+		...group,
+		items: group.items.map((item) => ({ ...item, number: (number += 1) })),
+	}));
+}
+
+/**
+ * Keep only items matching a search, dropping empty groups. Numbers stay.
+ * @param {Array<{place: string, items: Array<object>}>} groups
+ * @param {string} term
+ */
+export function filterGroups(groups, term) {
+	const wanted = String(term ?? "").trim().toLowerCase();
+	if (!wanted) return groups;
+
+	return groups
+		.map((group) => ({
+			...group,
+			items: group.items.filter(
+				(item) =>
+					String(item.number) === wanted.replace(/^#/, "") ||
+					(item.ingredient_name || "").toLowerCase().includes(wanted) ||
+					(item.category || "").toLowerCase().includes(wanted) ||
+					group.place.toLowerCase().includes(wanted)
+			),
+		}))
+		.filter((group) => group.items.length > 0);
+}
+
+/**
+ * Today's date the way the owner reads it: MM-DD-YYYY
+ * @param {Date} date
+ */
+export function formatSheetDate(date = new Date()) {
+	const pad = (n) => String(n).padStart(2, "0");
+	return `${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${date.getFullYear()}`;
+}

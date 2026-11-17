@@ -11,6 +11,7 @@ import Dashboard from "./pages/Dashboard";
 import RecipeBuilder from "./components/menu-items/RecipeBuilder";
 import Landing from "./pages/Landing";
 import VendorERPTest from "./pages/VendorERPTest";
+import CountSheet from "./pages/CountSheet";
 
 const queryClient = new QueryClient({
 	defaultOptions: {
@@ -125,6 +126,14 @@ function App() {
 								element={
 									<ProtectedRoute>
 										<Dashboard />
+									</ProtectedRoute>
+								}
+							/>
+							<Route
+								path="/print/count-sheet"
+								element={
+									<ProtectedRoute>
+										<CountSheet />
 									</ProtectedRoute>
 								}
 							/>

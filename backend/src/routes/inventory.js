@@ -147,6 +147,55 @@ function sendBulkError(res, error, fallback) {
 	res.status(500).json({ error: `${fallback}. Try again.` });
 }
 
+// GET /api/inventory/count-sheet
+// What a printed count sheet needs: the restaurant's name and every item
+// with where it's kept. No costs; the sheet goes on a clipboard.
+router.get("/count-sheet", async (req, res) => {
+	try {
+		const { data: restaurant } = await supabase
+			.from("restaurants")
+			.select("id, business_name")
+			.eq("business_id", req.businessId)
+			.maybeSingle();
+
+		if (!restaurant) {
+			return res.status(404).json({ error: "No restaurant found for this account" });
+		}
+
+		let restaurantName = restaurant.business_name || null;
+		if (!restaurantName) {
+			const { data: business } = await supabase
+				.from("businesses")
+				.select("name")
+				.eq("id", req.businessId)
+				.maybeSingle();
+			restaurantName = business?.name || null;
+		}
+
+		const { data, error } = await supabase
+			.from("restaurant_inventory")
+			.select("id, quantity, unit, location, ingredient:ingredient_library(name, category)")
+			.eq("restaurant_id", restaurant.id);
+
+		if (error) throw error;
+
+		res.json({
+			restaurantName,
+			items: (data || []).map((row) => ({
+				id: row.id,
+				ingredient_name: row.ingredient?.name || "Unnamed item",
+				category: row.ingredient?.category || null,
+				quantity: row.quantity,
+				unit: row.unit,
+				location: row.location,
+			})),
+		});
+	} catch (error) {
+		console.error("Count sheet error:", error);
+		res.status(500).json({ error: "Couldn't load the count sheet. Try again." });
+	}
+});
+
 // POST /api/inventory/bulk/preview
 // Check rows for a bulk add without saving. Body: { rows: [{ name, unit,
 // quantity, costPerUnit, category, minimumQuantity, location, storageType }] }
