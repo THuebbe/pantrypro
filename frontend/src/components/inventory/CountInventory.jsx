@@ -1,13 +1,14 @@
 // frontend\src\components\inventory\CountInventory.jsx
 
 import { useMemo, useState } from "react";
-import { Search, CheckCircle, AlertTriangle } from "lucide-react";
+import { Search, CheckCircle, AlertTriangle, Printer } from "lucide-react";
 import { useSaveCount } from "../../hooks/useBulkInventory";
 import {
 	COUNT_REASONS,
-	NO_LOCATION,
+	filterGroups,
 	formatMoney,
 	formatQty,
+	orderForCount,
 	round,
 	varianceFor,
 } from "../../utils/countMath";
@@ -35,34 +36,9 @@ export default function CountInventory({ inventory = [], onDone, onDirtyChange }
 	};
 
 	// Grouped by where things are kept, so the list follows a walk through
-	// the storage areas.
-	const groups = useMemo(() => {
-		const term = search.trim().toLowerCase();
-		const visible = inventory
-			.filter(
-				(item) =>
-					!term ||
-					(item.ingredient_name || "").toLowerCase().includes(term) ||
-					(item.category || "").toLowerCase().includes(term) ||
-					(item.location || "").toLowerCase().includes(term)
-			)
-			.sort((a, b) =>
-				(a.ingredient_name || "").localeCompare(b.ingredient_name || "")
-			);
-
-		const byLocation = new Map();
-		for (const item of visible) {
-			const place = item.location?.trim() || NO_LOCATION;
-			if (!byLocation.has(place)) byLocation.set(place, []);
-			byLocation.get(place).push(item);
-		}
-
-		return [...byLocation.entries()].sort(([a], [b]) => {
-			if (a === NO_LOCATION) return 1;
-			if (b === NO_LOCATION) return -1;
-			return a.localeCompare(b);
-		});
-	}, [inventory, search]);
+	// the storage areas. Same order and numbers as the printed count sheet.
+	const ordered = useMemo(() => orderForCount(inventory), [inventory]);
+	const groups = useMemo(() => filterGroups(ordered, search), [ordered, search]);
 
 	const entered = inventory
 		.map((item) => ({ item, variance: varianceFor(item, counts[item.id]) }))
@@ -155,9 +131,20 @@ export default function CountInventory({ inventory = [], onDone, onDirtyChange }
 
 	return (
 		<div className="space-y-4">
-			<p className="text-sm text-gray-600">
-				Type what you counted. Leave an item blank to skip it; it won&apos;t change.
-			</p>
+			<div className="flex flex-wrap items-center justify-between gap-2">
+				<p className="text-sm text-gray-600">
+					Type what you counted. Leave an item blank to skip it; it won&apos;t change.
+				</p>
+				<a
+					href="/print/count-sheet"
+					target="_blank"
+					rel="noreferrer"
+					className="inline-flex items-center gap-1 text-sm text-green-700 font-medium hover:text-green-800"
+				>
+					<Printer size={16} />
+					Print a count sheet
+				</a>
+			</div>
 
 			<div className="relative">
 				<Search
@@ -169,13 +156,13 @@ export default function CountInventory({ inventory = [], onDone, onDirtyChange }
 					aria-label="Find an item"
 					value={search}
 					onChange={(e) => setSearch(e.target.value)}
-					placeholder="Find an item, category or location"
+					placeholder="Find an item, #number, category or location"
 					className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
 				/>
 			</div>
 
 			<div className="space-y-5">
-				{groups.map(([place, items]) => (
+				{groups.map(({ place, items }) => (
 					<section key={place}>
 						<h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
 							{place}
@@ -261,7 +248,10 @@ function CountRow({ item, value, onChange }) {
 	return (
 		<div className="flex items-center gap-3 px-3 py-2">
 			<div className="flex-1 min-w-0">
-				<p className="font-medium text-gray-900 truncate">{item.ingredient_name}</p>
+				<p className="font-medium text-gray-900 truncate">
+					<span className="text-gray-400 font-normal mr-1">#{item.number}</span>
+					{item.ingredient_name}
+				</p>
 				<p className="text-xs text-gray-500">
 					PantryPro has {formatQty(item.quantity)} {item.unit}
 				</p>
