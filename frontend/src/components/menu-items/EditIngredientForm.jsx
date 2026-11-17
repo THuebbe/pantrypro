@@ -2,50 +2,30 @@
 
 import { useState } from "react";
 import { useUpdateRecipeIngredient } from "../../hooks/useRecipes";
+import { unitChoicesFor } from "../../utils/recipeUnits";
 
 export default function EditIngredientForm({
 	ingredient,
+	inventoryUnit,
 	menuItemId,
 	onSuccess,
 	onCancel,
 }) {
 	const [quantity, setQuantity] = useState(ingredient.quantity.toString());
-	const [unit, setUnit] = useState(ingredient.unit);
+	// Only units that convert to the unit this ingredient is counted in
+	const groupedUnits = unitChoicesFor(inventoryUnit || ingredient.unit);
+	const unitIsUsable = Object.values(groupedUnits)
+		.flat()
+		.some((opt) => opt.value === ingredient.unit);
+
+	// A unit that can't convert starts blank so a working one has to be picked
+	const [unit, setUnit] = useState(unitIsUsable ? ingredient.unit : "");
 	const [prepLossFactor, setPrepLossFactor] = useState(
 		ingredient.prep_loss_factor.toString()
 	);
 	const [errors, setErrors] = useState({});
 
 	const updateIngredientMutation = useUpdateRecipeIngredient();
-
-	const unitOptions = [
-		// Weight
-		{ value: "oz", label: "oz (ounces)", group: "Weight" },
-		{ value: "lbs", label: "lbs (pounds)", group: "Weight" },
-		{ value: "g", label: "g (grams)", group: "Weight" },
-		{ value: "kg", label: "kg (kilograms)", group: "Weight" },
-
-		// Volume
-		{ value: "tsp", label: "tsp (teaspoon)", group: "Volume" },
-		{ value: "tbsp", label: "tbsp (tablespoon)", group: "Volume" },
-		{ value: "cup", label: "cup", group: "Volume" },
-		{ value: "pt", label: "pt (pint)", group: "Volume" },
-		{ value: "qt", label: "qt (quart)", group: "Volume" },
-		{ value: "gal", label: "gal (gallon)", group: "Volume" },
-		{ value: "ml", label: "ml (milliliter)", group: "Volume" },
-		{ value: "l", label: "l (liter)", group: "Volume" },
-		{ value: "fl oz", label: "fl oz (fluid ounce)", group: "Volume" },
-
-		// Count
-		{ value: "each", label: "each", group: "Count" },
-		{ value: "dozen", label: "dozen", group: "Count" },
-	];
-
-	const groupedUnits = unitOptions.reduce((acc, option) => {
-		if (!acc[option.group]) acc[option.group] = [];
-		acc[option.group].push(option);
-		return acc;
-	}, {});
 
 	const validate = () => {
 		const newErrors = {};
@@ -126,6 +106,14 @@ export default function EditIngredientForm({
 					<p className="mt-1 text-sm text-red-600">{errors.quantity}</p>
 				)}
 			</div>
+
+			{!unitIsUsable && (
+				<div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+					This was saved in {ingredient.unit}, but it&apos;s counted in{" "}
+					{inventoryUnit} in inventory, so it isn&apos;t being costed or
+					deducted. Pick one of the units below.
+				</div>
+			)}
 
 			{/* Unit */}
 			<div>

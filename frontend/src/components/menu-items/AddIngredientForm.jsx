@@ -5,6 +5,7 @@ import { Search } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAddRecipeIngredient } from "../../hooks/useRecipes";
 import api from "../../core/database/api";
+import { unitChoicesFor } from "../../utils/recipeUnits";
 
 export default function AddIngredientForm({
 	menuItemId,
@@ -42,38 +43,14 @@ export default function AddIngredientForm({
 	// Search filtering
 	const filteredInventory = availableInventory.filter(
 		(item) =>
-			item.ingredient_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			item.category.toLowerCase().includes(searchQuery.toLowerCase())
+			(item.ingredient_name || "")
+				.toLowerCase()
+				.includes(searchQuery.toLowerCase()) ||
+			(item.category || "").toLowerCase().includes(searchQuery.toLowerCase())
 	);
 
-	const unitOptions = [
-		// Weight
-		{ value: "oz", label: "oz (ounces)", group: "Weight" },
-		{ value: "lbs", label: "lbs (pounds)", group: "Weight" },
-		{ value: "g", label: "g (grams)", group: "Weight" },
-		{ value: "kg", label: "kg (kilograms)", group: "Weight" },
-
-		// Volume
-		{ value: "tsp", label: "tsp (teaspoon)", group: "Volume" },
-		{ value: "tbsp", label: "tbsp (tablespoon)", group: "Volume" },
-		{ value: "cup", label: "cup", group: "Volume" },
-		{ value: "pt", label: "pt (pint)", group: "Volume" },
-		{ value: "qt", label: "qt (quart)", group: "Volume" },
-		{ value: "gal", label: "gal (gallon)", group: "Volume" },
-		{ value: "ml", label: "ml (milliliter)", group: "Volume" },
-		{ value: "l", label: "l (liter)", group: "Volume" },
-		{ value: "fl oz", label: "fl oz (fluid ounce)", group: "Volume" },
-
-		// Count
-		{ value: "each", label: "each", group: "Count" },
-		{ value: "dozen", label: "dozen", group: "Count" },
-	];
-
-	const groupedUnits = unitOptions.reduce((acc, option) => {
-		if (!acc[option.group]) acc[option.group] = [];
-		acc[option.group].push(option);
-		return acc;
-	}, {});
+	// Only units that convert to the unit this ingredient is counted in
+	const groupedUnits = unitChoicesFor(selectedIngredient?.unit);
 
 	const handleSelectIngredient = (item) => {
 		setSelectedIngredient(item);
@@ -180,7 +157,8 @@ export default function AddIngredientForm({
 										{item.ingredient_name}
 									</div>
 									<div className="text-sm text-gray-600">
-										{item.category} • {item.quantity} {item.unit} available
+										{item.category || "No category"} • {item.quantity}{" "}
+										{item.unit} available
 									</div>
 								</button>
 							))}
@@ -201,8 +179,9 @@ export default function AddIngredientForm({
 									{selectedIngredient.ingredient_name}
 								</div>
 								<div className="text-sm text-gray-600">
-									{selectedIngredient.category} • {selectedIngredient.quantity}{" "}
-									{selectedIngredient.unit} in stock
+									{selectedIngredient.category || "No category"} •{" "}
+									{selectedIngredient.quantity} {selectedIngredient.unit} in
+									stock
 								</div>
 							</div>
 							<button

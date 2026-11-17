@@ -73,6 +73,9 @@ export function useSaveRecipe() {
 			queryClient.invalidateQueries({
 				queryKey: ["recipe-cost", variables.menuItemId],
 			});
+			queryClient.invalidateQueries({
+				queryKey: ["recipe-validation", variables.menuItemId],
+			});
 		},
 	});
 }
@@ -93,6 +96,9 @@ export function useAddRecipeIngredient() {
 			queryClient.invalidateQueries({
 				queryKey: ["recipe-cost", variables.menuItemId],
 			});
+			queryClient.invalidateQueries({
+				queryKey: ["recipe-validation", variables.menuItemId],
+			});
 		},
 	});
 }
@@ -104,7 +110,7 @@ export function useUpdateRecipeIngredient() {
 	const queryClient = useQueryClient();
 
 	return useMutation({
-		mutationFn: ({ recipeIngredientId, updates, menuItemId }) =>
+		mutationFn: ({ recipeIngredientId, updates }) =>
 			updateRecipeIngredient(recipeIngredientId, updates),
 		onSuccess: (data, variables) => {
 			if (variables.menuItemId) {
@@ -113,6 +119,9 @@ export function useUpdateRecipeIngredient() {
 				});
 				queryClient.invalidateQueries({
 					queryKey: ["recipe-cost", variables.menuItemId],
+				});
+				queryClient.invalidateQueries({
+					queryKey: ["recipe-validation", variables.menuItemId],
 				});
 			}
 		},
@@ -126,7 +135,7 @@ export function useDeleteRecipeIngredient() {
 	const queryClient = useQueryClient();
 
 	return useMutation({
-		mutationFn: ({ recipeIngredientId, menuItemId }) =>
+		mutationFn: ({ recipeIngredientId }) =>
 			deleteRecipeIngredient(recipeIngredientId),
 		onSuccess: (data, variables) => {
 			if (variables.menuItemId) {
@@ -135,6 +144,9 @@ export function useDeleteRecipeIngredient() {
 				});
 				queryClient.invalidateQueries({
 					queryKey: ["recipe-cost", variables.menuItemId],
+				});
+				queryClient.invalidateQueries({
+					queryKey: ["recipe-validation", variables.menuItemId],
 				});
 			}
 		},
