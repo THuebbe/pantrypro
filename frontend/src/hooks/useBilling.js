@@ -46,8 +46,9 @@ export function useOpenBillingPortal() {
 }
 
 /**
- * Decides whether a billing banner should show. One appears only when the owner needs to act: no trial started yet, a
- * failed payment, or a read-only account.
+ * Decides whether a billing banner should show. With billing enforced, an
+ * account without a plan never gets past the card page, so in practice this
+ * is the grace-period banner after a failed payment.
  */
 export function useBillingNotice() {
 	const location = useLocation();

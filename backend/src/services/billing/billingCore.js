@@ -10,10 +10,11 @@
  * The policy:
  *   - A new business starts a free trial by entering a card.
  *   - Trialing or paid up: full access.
- *   - A payment fails: full access for a grace period, then read-only.
- *   - Cancelled, or never subscribed: read-only.
- *   - Read-only means the owner can still see and export everything.
- *     Nobody is locked out of their own inventory data.
+ *   - A payment fails: full access for a grace period, then blocked.
+ *   - Cancelled, or never subscribed: blocked.
+ *   - Blocked means every screen and API call sends the owner to the card
+ *     page. Sign-in, the card page and Stripe's webhook always work, so an
+ *     owner can always get back in by paying.
  */
 
 export const TRIAL_DAYS = 30;
@@ -41,7 +42,7 @@ export function billingMode(env = process.env) {
  * @param {object} options
  * @param {boolean} options.enforced - Whether billing is enforced
  * @param {Date} [options.now]
- * @returns {{access: "full"|"read_only", state: string, message: string, graceEndsAt: string|null}}
+ * @returns {{access: "full"|"blocked", state: string, message: string, graceEndsAt: string|null}}
  */
 export function accessFor(business, { enforced, now = new Date() } = {}) {
 	const full = (state, message = "") => ({
@@ -50,8 +51,8 @@ export function accessFor(business, { enforced, now = new Date() } = {}) {
 		message,
 		graceEndsAt: null,
 	});
-	const readOnly = (state, message) => ({
-		access: "read_only",
+	const blocked = (state, message) => ({
+		access: "blocked",
 		state,
 		message,
 		graceEndsAt: null,
@@ -80,23 +81,23 @@ export function accessFor(business, { enforced, now = new Date() } = {}) {
 			};
 		}
 
-		return readOnly(
+		return blocked(
 			"lapsed",
-			"Your payment is overdue, so the account is read-only. Update your card to restore full access."
+			"Your payment is overdue. Update your card to get back into PantryPro."
 		);
 	}
 
 	if (!status) {
-		return readOnly(
+		return blocked(
 			"none",
 			`Start your ${TRIAL_DAYS}-day free trial to begin using PantryPro.`
 		);
 	}
 
 	// canceled, unpaid, incomplete, incomplete_expired, paused
-	return readOnly(
+	return blocked(
 		"lapsed",
-		"Your subscription has ended, so the account is read-only. Resubscribe to restore full access."
+		"Your subscription has ended. Resubscribe to get back into PantryPro."
 	);
 }
 

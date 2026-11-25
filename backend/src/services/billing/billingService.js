@@ -12,7 +12,7 @@
  *   STRIPE_SECRET_KEY      Stripe secret key
  *   STRIPE_PRICE_ID        The monthly price customers subscribe to
  *   STRIPE_WEBHOOK_SECRET  Signing secret of the webhook endpoint
- *   BILLING_ENFORCED       "true" to make unpaid accounts read-only
+ *   BILLING_ENFORCED       "true" to lock accounts without an active plan
  *   FRONTEND_URL           Where Stripe sends the customer back to
  */
 

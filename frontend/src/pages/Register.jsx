@@ -1,15 +1,19 @@
 // /frontend/src/pages/Register.jsx
 
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-// import { useAuth } from "../core/auth/useAuth";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "../core/auth/useAuth";
 import RegisterUser from "./RegisterUser";
 import RegisterBusiness from "./RegisterBusiness";
 
 export default function Register() {
-	const [step, setStep] = useState(1);
+	const [searchParams] = useSearchParams();
+	const { isAuthenticated } = useAuth();
+	// Someone signed in without a restaurant is sent back here to finish it.
+	const [step, setStep] = useState(
+		isAuthenticated && searchParams.get("step") === "restaurant" ? 2 : 1
+	);
 	const navigate = useNavigate();
-	// const { user } = useAuth();
 
 	const handleUserSuccess = () => {
 		setStep(2);
@@ -19,13 +23,6 @@ export default function Register() {
 	// Stripe Checkout there still takes promo codes (FOUNDER).
 	const handleBusinessSuccess = () => {
 		navigate("/settings/billing");
-	};
-
-	// Billing needs a business, so skipping that step still goes to the
-	// dashboard. The billing banner there points to the card page.
-
-	const handleSkipBusiness = () => {
-		navigate("/dashboard");
 	};
 
 	return (
@@ -62,10 +59,7 @@ export default function Register() {
 				{/* Step Content */}
 				{step === 1 && <RegisterUser onSuccess={handleUserSuccess} />}
 				{step === 2 && (
-					<RegisterBusiness
-						onSuccess={handleBusinessSuccess}
-						onSkip={handleSkipBusiness}
-					/>
+					<RegisterBusiness onSuccess={handleBusinessSuccess} />
 				)}
 			</div>
 		</div>

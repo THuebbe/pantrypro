@@ -52,15 +52,21 @@ api.interceptors.response.use(
 	async (error) => {
 		const originalRequest = error.config;
 
-		// 402: the account is read-only until billing is sorted out. Take the
-		// owner to the Billing screen, which explains why and how to fix it.
-		if (
-			error.response?.status === 402 &&
-			error.response?.data?.code === "subscription_required" &&
-			!window.location.pathname.startsWith("/settings/billing")
-		) {
-			window.location.assign("/settings/billing?locked=1");
-			return Promise.reject(error);
+		// 402: no active plan, so the server refused the call. Take the owner
+		// to the card page, which explains why and how to get back in. With
+		// no restaurant yet, finish that step first.
+		if (error.response?.status === 402) {
+			const code = error.response?.data?.code;
+			const path = window.location.pathname;
+
+			if (code === "business_required" && !path.startsWith("/register")) {
+				window.location.assign("/register?step=restaurant");
+				return Promise.reject(error);
+			}
+			if (code === "subscription_required" && !path.startsWith("/settings/billing")) {
+				window.location.assign("/settings/billing?locked=1");
+				return Promise.reject(error);
+			}
 		}
 
 		// Only handle 401 errors
