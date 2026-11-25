@@ -39,71 +39,117 @@ export function toUserDetails(row) {
 	};
 }
 
-export async function registerUser(email, password, metadata) {
-	try {
-		// Step 1: Create the user with admin API
-		const { data, error } = await supabase.auth.admin.createUser({
-			email: email,
-			password: password,
-			email_confirm: true,
-			user_metadata: {
-				firstName: metadata.firstName || "",
-				lastName: metadata.lastName || "",
-			},
-		});
+/**
+ * Make the login and user record for a new owner whose card Stripe has
+ * confirmed. Only the sign-up flow calls this (signupService.js); there is
+ * no public route that makes an account.
+ * @param {object} params
+ * @param {string} params.email
+ * @param {string} params.password
+ * @param {string} params.firstName
+ * @param {string} params.lastName
+ * @returns {Promise<{id: string}>} The new user's id
+ */
+export async function createOwnerAccount({ email, password, firstName, lastName }) {
+	const { data, error } = await supabase.auth.admin.createUser({
+		email,
+		password,
+		email_confirm: true,
+		user_metadata: { firstName: firstName || "", lastName: lastName || "" },
+	});
 
-		if (error) throw new Error(`Auth creation failed: ${error.message}`);
+	if (error) throw new Error(`Auth creation failed: ${error.message}`);
 
-		// Step 2: Insert into users table (snake_case columns)
-		const { error: dbError } = await supabase.from("users").insert({
-			id: data.user.id,
-			email: data.user.email,
-			first_name: metadata.firstName || null,
-			last_name: metadata.lastName || null,
-			role: metadata.role || "MANAGER",
-			business_id: metadata.businessId || null,
-			created_at: new Date().toISOString(),
-			updated_at: new Date().toISOString(),
-		});
+	const now = new Date().toISOString();
+	const { error: dbError } = await supabase.from("users").insert({
+		id: data.user.id,
+		email: data.user.email,
+		first_name: firstName || null,
+		last_name: lastName || null,
+		role: "MANAGER",
+		business_id: null,
+		created_at: now,
+		updated_at: now,
+	});
 
-		if (dbError) {
-			// Don't leave a login behind that has no user record: the email
-			// would be taken and the person could never finish signing up.
-			await supabase.auth.admin.deleteUser(data.user.id);
-			throw new Error(`Database user creation failed: ${dbError.message}`);
-		}
-
-		// Step 3: Sign the user in to get a session/token
-		const { data: sessionData, error: signInError } =
-			await authClient.auth.signInWithPassword({
-				email: email,
-				password: password,
-			});
-
-		if (signInError) throw new Error(`Sign in failed: ${signInError.message}`);
-
-		// Step 4: Get full user details from users table
-		const { data: userDetails, error: userError } = await supabase
-			.from("users")
-			.select("*")
-			.eq("id", data.user.id)
-			.single();
-
-		if (userError)
-			throw new Error(`Failed to fetch user details: ${userError.message}`);
-
-		return {
-			user: sessionData.user,
-			session: sessionData.session,
-			userDetails: toUserDetails(userDetails),
-			accessToken: sessionData.session.access_token,
-			refreshToken: sessionData.session.refresh_token,
-			expiresAt: sessionData.session.expires_at,
-			message: "User successfully registered",
-		};
-	} catch (error) {
-		throw error;
+	if (dbError) {
+		// Don't leave a login behind with no user record.
+		await supabase.auth.admin.deleteUser(data.user.id);
+		throw new Error(`Database user creation failed: ${dbError.message}`);
 	}
+
+	return { id: data.user.id };
+}
+
+/**
+ * The business a user belongs to, if any
+ * @param {string} userId
+ * @returns {Promise<string|null>}
+ */
+export async function getUserBusinessId(userId) {
+	const { data, error } = await supabase
+		.from("users")
+		.select("business_id")
+		.eq("id", userId)
+		.maybeSingle();
+
+	if (error) throw new Error(`User lookup failed: ${error.message}`);
+
+	return data?.business_id || null;
+}
+
+/**
+ * Is this email already used by an account?
+ * @param {string} email - Lowercased
+ * @returns {Promise<boolean>}
+ */
+export async function emailHasAccount(email) {
+	const { data, error } = await supabase
+		.from("users")
+		.select("id")
+		.eq("email", email)
+		.limit(1);
+
+	if (error) throw new Error(`User lookup failed: ${error.message}`);
+
+	return Array.isArray(data) && data.length > 0;
+}
+
+/**
+ * Sign a user in without their password, for the browser that has just
+ * finished sign-up. A one-time sign-in link is made and used on the spot;
+ * no email is sent.
+ * @param {string} email
+ * @returns {Promise<object>} Same shape as loginUser
+ */
+export async function issueSessionForEmail(email) {
+	const { data: link, error: linkError } = await supabase.auth.admin.generateLink({
+		type: "magiclink",
+		email,
+	});
+
+	if (linkError) throw new Error(`Sign-in link failed: ${linkError.message}`);
+
+	const { data, error } = await authClient.auth.verifyOtp({
+		token_hash: link.properties.hashed_token,
+		type: "magiclink",
+	});
+
+	if (error) throw new Error(`Sign-in failed: ${error.message}`);
+
+	const { data: userData } = await supabase
+		.from("users")
+		.select("*")
+		.eq("id", data.user.id)
+		.single();
+
+	return {
+		user: data.user,
+		userDetails: toUserDetails(userData),
+		accessToken: data.session.access_token,
+		refreshToken: data.session.refresh_token,
+		expiresAt: data.session.expires_at,
+	};
 }
 
 export async function loginUser(email, password) {

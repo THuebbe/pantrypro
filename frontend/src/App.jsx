@@ -6,6 +6,7 @@ import { HeroUIProvider } from "@heroui/react";
 import { AuthProvider } from "./core/auth/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Register from "./pages/Register";
+import SignupComplete from "./pages/SignupComplete";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import RecipeBuilder from "./components/menu-items/RecipeBuilder";
@@ -40,6 +41,10 @@ function App() {
 							<Route
 								path="/register"
 								element={<Register />}
+							/>
+							<Route
+								path="/signup/complete"
+								element={<SignupComplete />}
 							/>
 							<Route
 								path="/dashboard"

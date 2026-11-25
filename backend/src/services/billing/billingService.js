@@ -44,7 +44,7 @@ export class BillingError extends Error {
 	}
 }
 
-function getStripe() {
+export function getStripe() {
 	if (!billingMode().configured) {
 		throw new BillingError("Billing is not set up on the server yet.", 503);
 	}
@@ -56,7 +56,7 @@ function getStripe() {
 	return sharedStripe;
 }
 
-function frontendUrl() {
+export function frontendUrl() {
 	return (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "");
 }
 
@@ -226,7 +226,7 @@ export async function createPortalSession({ businessId, stripe }) {
  * @param {object} subscription - Stripe Subscription object
  * @returns {Promise<boolean>} True if a business was updated
  */
-async function applySubscription(subscription) {
+export async function applySubscription(subscription) {
 	const customerId =
 		typeof subscription.customer === "string"
 			? subscription.customer
@@ -286,6 +286,15 @@ export async function handleStripeEvent(event, stripe) {
 			const session = event.data.object;
 			if (session.mode !== "subscription" || !session.subscription) {
 				return { handled: false };
+			}
+
+			// A new sign-up: the account is made now that the card is in.
+			if (session.metadata?.pending_signup_id) {
+				const { finishPendingSignup } = await import("../signup/signupService.js");
+				const row = await finishPendingSignup(session.metadata.pending_signup_id, session, {
+					stripe: stripe || getStripe(),
+				});
+				return { handled: Boolean(row) };
 			}
 
 			const client = stripe || getStripe();

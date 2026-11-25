@@ -2,9 +2,13 @@
 
 import { useState } from "react";
 import { Check } from "lucide-react";
-import { useAuth } from "../core/auth/useAuth";
 
-export default function RegisterBusiness({ onSuccess }) {
+/**
+ * Step 2 of sign-up: the restaurant. onSubmit does the work (start the
+ * card checkout, or create the restaurant for someone already signed in);
+ * an error it throws is shown on the form.
+ */
+export default function RegisterBusiness({ onSubmit, onBack, submitLabel = "Complete Setup" }) {
 	const [formData, setFormData] = useState({
 		name: "",
 		domain: "",
@@ -13,7 +17,6 @@ export default function RegisterBusiness({ onSuccess }) {
 	});
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState(null);
-	const { createBusiness } = useAuth();
 
 	const handleInputChange = (e) => {
 		const { name, value } = e.target;
@@ -65,20 +68,12 @@ export default function RegisterBusiness({ onSuccess }) {
 		setError(null);
 
 		try {
-			console.log("Submitting business data:", formData);
-			const result = await createBusiness(formData);
-			console.log("Business created successfully:", result);
-			setTimeout(() => {}, 5000);
-			onSuccess(); // Move to dashboard
+			await onSubmit(formData);
 		} catch (err) {
-			console.error("Full error object:", err);
-			console.error("Error response:", err.response);
-			console.error("Error data:", err.response?.data);
 			setError(
 				err.response?.data?.error ||
-					"Failed to create business. Please try again."
+					"Something went wrong. Please try again."
 			);
-			setTimeout(() => {}, 5000);
 		} finally {
 			setIsLoading(false);
 		}
@@ -224,12 +219,23 @@ export default function RegisterBusiness({ onSuccess }) {
 					{isLoading ? (
 						<span className="flex items-center justify-center gap-2">
 							<div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-							Creating Restaurant...
+							Saving...
 						</span>
 					) : (
-						"Complete Setup"
+						submitLabel
 					)}
 				</button>
+
+				{onBack && (
+					<button
+						type="button"
+						onClick={onBack}
+						disabled={isLoading}
+						className="w-full py-2 text-gray-600 hover:text-gray-800 text-sm"
+					>
+						Back
+					</button>
+				)}
 			</form>
 		</div>
 	);

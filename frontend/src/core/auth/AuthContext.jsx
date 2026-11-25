@@ -152,13 +152,16 @@ export function AuthProvider({ children }) {
 		};
 	}, [refreshTokens]);
 
-	const register = async (userData) => {
-		const response = await api.post("/auth/register", userData);
-		storeTokens(response.data.accessToken, response.data.refreshToken);
-		setUser(response.data.userDetails);
-		updateActivity();
-		return response.data;
-	};
+	// Sign in with a session the server made for this browser when sign-up
+	// finished (see /signup/complete). No password involved.
+	const acceptSession = useCallback(
+		(session) => {
+			storeTokens(session.accessToken, session.refreshToken);
+			setUser(session.userDetails);
+			updateActivity();
+		},
+		[storeTokens]
+	);
 
 	const createBusiness = async (businessData) => {
 		const response = await api.post("/business/create", businessData);
@@ -190,7 +193,7 @@ export function AuthProvider({ children }) {
 		user,
 		loading,
 		isRefreshing,
-		register,
+		acceptSession,
 		createBusiness,
 		login,
 		logout,

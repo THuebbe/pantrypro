@@ -2,7 +2,6 @@
 
 import express from "express";
 import {
-	registerUser,
 	loginUser,
 	logoutUser,
 	resetPassword,
@@ -17,23 +16,8 @@ const router = express.Router();
 // PUBLIC ROUTES (no auth required)
 // ============================================
 
-// POST /api/auth/register
-router.post("/register", async (req, res) => {
-	try {
-		const { email, password, firstName, lastName, businessId, role } = req.body;
-
-		const result = await registerUser(email, password, {
-			firstName,
-			lastName,
-			businessId,
-			role,
-		});
-
-		res.status(201).json(result);
-	} catch (error) {
-		res.status(400).json({ error: error.message });
-	}
-});
+// Accounts are made only by the sign-up flow (/api/signup), once Stripe
+// has confirmed the card. There is no route that makes one directly.
 
 // POST /api/auth/login
 router.post("/login", async (req, res) => {
