@@ -31,6 +31,8 @@ import posImportRoutes from "./routes/posImportRoutes.js";
 import salesRoutes from "./routes/salesRoutes.js";
 import deductionRoutes from "./routes/deductionRoutes.js";
 import billingRoutes, { stripeWebhookHandler } from "./routes/billingRoutes.js";
+import signupRoutes from "./routes/signupRoutes.js";
+import { startSignupCleanupJob } from "./services/signup/signupService.js";
 import { startSalesProcessingJob } from "./jobs/salesProcessingJob.js";
 // Load environment variables
 
@@ -95,6 +97,7 @@ app.use("/api/pos-import", posImportRoutes);
 app.use("/api/sales", salesRoutes);
 app.use("/api/deductions", deductionRoutes);
 app.use("/api/billing", billingRoutes);
+app.use("/api/signup", signupRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -130,4 +133,7 @@ app.listen(PORT, () => {
 	if (process.env.POS_SYNC_ENABLED !== "false") {
 		startSalesProcessingJob();
 	}
+
+	// Delete sign-ups that never got a card, every hour.
+	startSignupCleanupJob();
 });

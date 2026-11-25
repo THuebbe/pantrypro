@@ -2,19 +2,20 @@
 
 import { useState } from "react";
 import { Eye, EyeOff, Check, X } from "lucide-react";
-import { useAuth } from "../core/auth/useAuth";
 
-export default function RegisterUser({ onSuccess }) {
+/**
+ * Step 1 of sign-up: the owner's name, email and password. Nothing is sent
+ * anywhere yet; the details are passed up and sent with the restaurant.
+ */
+export default function RegisterUser({ initialValues, onNext }) {
 	const [formData, setFormData] = useState({
 		firstName: "",
 		lastName: "",
 		email: "",
 		password: "",
+		...initialValues,
 	});
 	const [showPassword, setShowPassword] = useState(false);
-	const [isLoading, setIsLoading] = useState(false);
-	const [error, setError] = useState(null);
-	const { register } = useAuth();
 
 	const handleInputChange = (e) => {
 		const { name, value } = e.target;
@@ -78,26 +79,10 @@ export default function RegisterUser({ onSuccess }) {
 		});
 	};
 
-	const handleSubmit = async (e) => {
+	const handleSubmit = (e) => {
 		e.preventDefault();
 		if (!isFormValid()) return;
-		setIsLoading(true);
-		setError(null);
-		try {
-			const result = await register(formData);
-			console.log("Full registration response:", result); // 👈 ADD
-			console.log("AccessToken from response:", result.accessToken); // 👈 ADD
-			console.log("Token in localStorage:", localStorage.getItem("auth_token")); // 👈 ADD
-
-			onSuccess();
-		} catch (err) {
-			console.error("Registration error:", err.response?.data); // 👈 ADD
-			setError(
-				err.response?.data?.error || "Registration failed. Please try again."
-			);
-		} finally {
-			setIsLoading(false);
-		}
+		onNext(formData);
 	};
 
 	return (
@@ -114,12 +99,6 @@ export default function RegisterUser({ onSuccess }) {
 				Start managing your restaurant inventory in minutes
 			</p>
 
-			{error && (
-				<div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-					{error}
-				</div>
-			)}
-
 			<form
 				onSubmit={handleSubmit}
 				className="space-y-4"
@@ -135,7 +114,6 @@ export default function RegisterUser({ onSuccess }) {
 						value={formData.firstName}
 						onChange={handleInputChange}
 						placeholder="Enter your first name"
-						disabled={isLoading}
 						className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
 							getValidationState("firstName", formData.firstName) === "success"
 								? "border-green-500"
@@ -162,7 +140,6 @@ export default function RegisterUser({ onSuccess }) {
 						value={formData.lastName}
 						onChange={handleInputChange}
 						placeholder="Enter your last name"
-						disabled={isLoading}
 						className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
 							getValidationState("lastName", formData.lastName) === "success"
 								? "border-green-500"
@@ -188,7 +165,6 @@ export default function RegisterUser({ onSuccess }) {
 						value={formData.email}
 						onChange={handleInputChange}
 						placeholder="Enter your email address"
-						disabled={isLoading}
 						className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
 							getValidationState("email", formData.email) === "success"
 								? "border-green-500"
@@ -217,7 +193,6 @@ export default function RegisterUser({ onSuccess }) {
 							value={formData.password}
 							onChange={handleInputChange}
 							placeholder="Create a strong password"
-							disabled={isLoading}
 							className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 pr-10 ${
 								getValidationState("password", formData.password) === "success"
 									? "border-green-500"
@@ -228,7 +203,6 @@ export default function RegisterUser({ onSuccess }) {
 							type="button"
 							onClick={() => setShowPassword(!showPassword)}
 							className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-							disabled={isLoading}
 						>
 							{showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
 						</button>
@@ -278,21 +252,14 @@ export default function RegisterUser({ onSuccess }) {
 				{/* Submit Button */}
 				<button
 					type="submit"
-					disabled={!isFormValid() || isLoading}
+					disabled={!isFormValid()}
 					className={`w-full py-3 rounded-lg font-semibold text-white transition-all ${
-						isFormValid() && !isLoading
+						isFormValid()
 							? "bg-green-600 hover:bg-green-700 cursor-pointer"
 							: "bg-gray-300 cursor-not-allowed"
 					}`}
 				>
-					{isLoading ? (
-						<span className="flex items-center justify-center gap-2">
-							<div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-							Creating Account...
-						</span>
-					) : (
-						"Create Account"
-					)}
+					Next: Your Restaurant
 				</button>
 			</form>
 
