@@ -1,5 +1,5 @@
 // /backend/src/tests/unit/billing.test.js
-// Unit tests for billing rules, the read-only gate and the Stripe flow.
+// Unit tests for billing rules, the billing gate and the Stripe flow.
 // No network or database needed. Run with: npm test
 
 import { test } from "node:test";
@@ -20,6 +20,7 @@ const {
 } = await import("../../services/billing/billingCore.js");
 const { supabase } = await import("../../services/supabase.js");
 const { checkBillingAccess } = await import("../../middleware/billingGate.js");
+const { selectBusinessBilling } = await import("../../services/billing/businessBilling.js");
 const {
 	BillingError,
 	createCheckoutSession,
@@ -126,7 +127,7 @@ test("trialing and paid accounts have full access", () => {
 	assert.equal(accessFor({ billing_status: "active" }, { enforced: true }).access, "full");
 });
 
-test("a failed payment keeps full access for the grace period, then read-only", () => {
+test("a failed payment keeps full access for the grace period, then is blocked", () => {
 	const inGrace = accessFor(
 		{ billing_status: "past_due", billing_past_due_since: daysAgo(GRACE_DAYS - 1) },
 		{ enforced: true, now: NOW }
@@ -140,23 +141,49 @@ test("a failed payment keeps full access for the grace period, then read-only", 
 		{ billing_status: "past_due", billing_past_due_since: daysAgo(GRACE_DAYS + 1) },
 		{ enforced: true, now: NOW }
 	);
-	assert.equal(lapsed.access, "read_only");
+	assert.equal(lapsed.access, "blocked");
 	assert.equal(lapsed.state, "lapsed");
 });
 
-test("never subscribed and cancelled accounts are read-only, with the right prompt", () => {
+test("never subscribed and cancelled accounts are blocked, with the right prompt", () => {
 	const fresh = accessFor({ billing_status: null }, { enforced: true });
-	assert.equal(fresh.access, "read_only");
+	assert.equal(fresh.access, "blocked");
 	assert.equal(fresh.state, "none");
 	assert.match(fresh.message, new RegExp(`${TRIAL_DAYS}-day free trial`));
 
 	for (const status of ["canceled", "unpaid", "incomplete_expired", "paused"]) {
 		const access = accessFor({ billing_status: status }, { enforced: true });
-		assert.equal(access.access, "read_only");
+		assert.equal(access.access, "blocked");
 		assert.equal(access.state, "lapsed");
 	}
 
-	assert.equal(accessFor(null, { enforced: true }).access, "read_only");
+	assert.equal(accessFor(null, { enforced: true }).access, "blocked");
+});
+
+test("a billing-exempt test account is never blocked", () => {
+	for (const row of [
+		{ billing_status: null },
+		{ billing_status: "canceled" },
+		{
+			billing_status: "past_due",
+			billing_past_due_since: new Date(Date.now() - 30 * 86400000).toISOString(),
+		},
+	]) {
+		const access = accessFor({ ...row, billing_exempt: true }, { enforced: true });
+		assert.equal(access.access, "full");
+		assert.equal(access.state, "exempt");
+	}
+
+	// An exempt account on a real plan still shows that plan.
+	assert.equal(
+		accessFor({ billing_status: "trialing", billing_exempt: true }, { enforced: true }).state,
+		"trialing"
+	);
+	// Only an explicit true counts.
+	assert.equal(
+		accessFor({ billing_status: null, billing_exempt: "true" }, { enforced: true }).access,
+		"blocked"
+	);
 });
 
 test("a Stripe subscription maps onto the business columns", () => {
@@ -220,7 +247,7 @@ test("the trial is offered once, and a live subscription can't be doubled", () =
 });
 
 // ---------------------------------------------------------------------------
-// The read-only gate
+// The billing gate
 // ---------------------------------------------------------------------------
 
 const request = (overrides = {}) => ({
@@ -242,32 +269,109 @@ test("the gate does nothing until billing is enforced", async (t) => {
 	);
 });
 
-test("an unsubscribed business can read but not change data", async (t) => {
+test("an unsubscribed business can't read or change anything", async (t) => {
 	stubBusiness(t, { billing_status: null });
 
 	await withEnv(ENFORCED, async () => {
-		assert.equal(await checkBillingAccess(request({ method: "GET" })), null);
-
-		const blocked = await checkBillingAccess(request());
-		assert.equal(blocked.status, 402);
-		assert.equal(blocked.body.code, "subscription_required");
-		assert.equal(blocked.body.billingState, "none");
-
-		for (const method of ["PUT", "PATCH", "DELETE"]) {
-			assert.equal((await checkBillingAccess(request({ method }))).status, 402);
+		for (const method of ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]) {
+			const blocked = await checkBillingAccess(request({ method }));
+			assert.equal(blocked.status, 402, method);
+			assert.equal(blocked.body.code, "subscription_required");
+			assert.equal(blocked.body.billingState, "none");
 		}
 	});
 });
 
-test("sign-in, business registration and billing are never blocked", async (t) => {
+test("a lapsed business is blocked on reads too, with the reason", async (t) => {
+	stubBusiness(t, {
+		billing_status: "past_due",
+		billing_past_due_since: new Date(Date.now() - (GRACE_DAYS + 1) * 86400000).toISOString(),
+	});
+
+	await withEnv(ENFORCED, async () => {
+		const blocked = await checkBillingAccess(request({ method: "GET", baseUrl: "/api/dashboard" }));
+		assert.equal(blocked.status, 402);
+		assert.equal(blocked.body.billingState, "lapsed");
+		assert.match(blocked.body.error, /Update your card/);
+	});
+});
+
+test("a failed renewal inside the grace period still gets in", async (t) => {
+	stubBusiness(t, {
+		billing_status: "past_due",
+		billing_past_due_since: new Date(Date.now() - 2 * 86400000).toISOString(),
+	});
+
+	await withEnv(ENFORCED, async () =>
+		assert.equal(await checkBillingAccess(request({ method: "GET" })), null)
+	);
+});
+
+test("sign-in, restaurant setup and billing are never blocked", async (t) => {
 	stubBusiness(t, { billing_status: "canceled" });
 
 	await withEnv(ENFORCED, async () => {
 		for (const baseUrl of ["/api/auth", "/api/business", "/api/billing"]) {
 			assert.equal(await checkBillingAccess(request({ baseUrl })), null);
+			assert.equal(await checkBillingAccess(request({ baseUrl, method: "GET" })), null);
 		}
-		assert.equal(await checkBillingAccess(request({ businessId: null })), null);
+		assert.equal(await checkBillingAccess(request({ method: "OPTIONS" })), null);
 	});
+});
+
+test("a user with no restaurant is sent to finish setup", async (t) => {
+	stubBusiness(t, null);
+
+	await withEnv(ENFORCED, async () => {
+		const blocked = await checkBillingAccess(request({ businessId: null, method: "GET" }));
+		assert.equal(blocked.status, 402);
+		assert.equal(blocked.body.code, "business_required");
+
+		assert.equal(
+			await checkBillingAccess(request({ businessId: null, baseUrl: "/api/business" })),
+			null
+		);
+	});
+});
+
+test("a billing-exempt business passes the gate", async (t) => {
+	stubBusiness(t, { billing_status: null, billing_exempt: true });
+
+	await withEnv(ENFORCED, async () =>
+		assert.equal(await checkBillingAccess(request({ method: "GET" })), null)
+	);
+});
+
+test("billing still works before the exempt column exists", async () => {
+	const selects = [];
+	const db = {
+		from: () => {
+			const chain = {
+				select: (columns) => {
+					selects.push(columns);
+					return chain;
+				},
+				eq: () => chain,
+				maybeSingle: async () =>
+					selects.at(-1).includes("billing_exempt")
+						? {
+								data: null,
+								error: { code: "42703", message: "column businesses.billing_exempt does not exist" },
+						  }
+						: { data: { billing_status: null }, error: null },
+			};
+			return chain;
+		},
+	};
+
+	const { data, error } = await selectBusinessBilling(
+		"billing_status",
+		(query) => query.eq("id", "biz-1"),
+		db
+	);
+	assert.equal(error, null);
+	assert.deepEqual(data, { billing_status: null });
+	assert.deepEqual(selects, ["billing_status, billing_exempt", "billing_status"]);
 });
 
 test("a trialing business passes the gate", async (t) => {
@@ -506,7 +610,7 @@ test("the billing summary tells the screen what to offer", async (t) => {
 		const summary = await getBillingSummary("biz-1");
 
 		assert.equal(summary.status, "none");
-		assert.equal(summary.access, "read_only");
+		assert.equal(summary.access, "blocked");
 		assert.equal(summary.trialAvailable, true);
 		assert.equal(summary.canSubscribe, true);
 		assert.equal(summary.canManage, false);

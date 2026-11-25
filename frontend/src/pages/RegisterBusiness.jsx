@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check } from "lucide-react";
 import { useAuth } from "../core/auth/useAuth";
 
-export default function RegisterBusiness({ onSuccess, onSkip }) {
+export default function RegisterBusiness({ onSuccess }) {
 	const [formData, setFormData] = useState({
 		name: "",
 		domain: "",
@@ -229,16 +229,6 @@ export default function RegisterBusiness({ onSuccess, onSkip }) {
 					) : (
 						"Complete Setup"
 					)}
-				</button>
-
-				{/* Skip Button */}
-				<button
-					type="button"
-					onClick={onSkip}
-					disabled={isLoading}
-					className="w-full py-2 text-gray-600 hover:text-gray-800 text-sm"
-				>
-					Skip for now
 				</button>
 			</form>
 		</div>

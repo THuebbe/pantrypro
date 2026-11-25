@@ -23,7 +23,7 @@ export async function requireAuth(req, res, next) {
 		return res.status(401).json({ error: error.message });
 	}
 
-	// Signed in. Now check the business may make changes (see billingGate.js).
+	// Signed in. Now check the business has an active plan (see billingGate.js).
 	try {
 		const blocked = await checkBillingAccess(req);
 

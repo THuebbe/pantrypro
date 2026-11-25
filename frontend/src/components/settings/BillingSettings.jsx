@@ -1,7 +1,9 @@
 // frontend\src\components\settings\BillingSettings.jsx
 
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { CreditCard, CheckCircle, AlertTriangle, Clock } from "lucide-react";
+import { useAuth } from "../../core/auth/useAuth";
 import {
 	useBillingStatus,
 	useStartCheckout,
@@ -51,12 +53,12 @@ function describe(billing) {
 					: "Update your card to keep your subscription going.",
 			};
 		case "lapsed":
-			// Read-only only applies once billing is enforced.
-			return billing.access === "read_only"
+			// The account is only locked once billing is enforced.
+			return billing.access === "blocked"
 				? {
 						tone: "red",
 						icon: AlertTriangle,
-						title: "Account is read-only",
+						title: "No active plan",
 						detail: billing.message,
 				  }
 				: {
@@ -65,6 +67,13 @@ function describe(billing) {
 						title: "No active subscription",
 						detail: "Your subscription has ended. Resubscribe to keep it going.",
 				  };
+		case "exempt":
+			return {
+				tone: "gray",
+				icon: CheckCircle,
+				title: "No plan needed",
+				detail: "This is a test account. It has full access without a plan.",
+			};
 		case "none":
 			return {
 				tone: "blue",
@@ -98,6 +107,10 @@ export default function BillingSettings({ params = {} }) {
 	const { data: billing, isLoading, error, refetch } = useBillingStatus();
 	const checkout = useStartCheckout();
 	const portal = useOpenBillingPortal();
+	const { logout } = useAuth();
+	const navigate = useNavigate();
+	const locked = billing?.access === "blocked";
+	const justSubscribed = params.checkout === "success" && billing?.access === "full";
 
 	// Stripe confirms the subscription a moment after sending the customer
 	// back, so look again shortly after returning from checkout.
@@ -139,10 +152,9 @@ export default function BillingSettings({ params = {} }) {
 		<div className="bg-white rounded-lg border border-gray-200 p-6">
 			<h2 className="text-2xl font-bold text-gray-900 mb-4">Billing</h2>
 
-			{params.locked && billing.access === "read_only" && (
+			{locked && billing.state !== "none" && (
 				<p className="mb-4 text-sm text-gray-700">
-					That change wasn't saved because the account is read-only. You can
-					still view everything.
+					PantryPro needs an active plan. Add your card below to get back in.
 				</p>
 			)}
 
@@ -188,6 +200,15 @@ export default function BillingSettings({ params = {} }) {
 								: "Resubscribe"}
 						</button>
 					)}
+					{justSubscribed && (
+						<button
+							type="button"
+							onClick={() => navigate("/dashboard")}
+							className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+						>
+							Go to dashboard
+						</button>
+					)}
 					{billing.canManage && (
 						<button
 							type="button"
@@ -202,6 +223,19 @@ export default function BillingSettings({ params = {} }) {
 			)}
 
 			{actionError && <p className="mt-3 text-sm text-red-600">{actionError}</p>}
+
+			{locked && (
+				<button
+					type="button"
+					onClick={async () => {
+						await logout();
+						navigate("/login");
+					}}
+					className="mt-4 text-sm text-gray-600 hover:text-gray-800 underline"
+				>
+					Sign out
+				</button>
+			)}
 
 			<p className="mt-6 text-xs text-gray-500">
 				Payments are handled by Stripe. PantryPro never sees or stores your card
