@@ -15,10 +15,14 @@ export default function Register() {
 		setStep(2);
 	};
 
+	// A new account goes straight to the card page to start the trial.
+	// Stripe Checkout there still takes promo codes (FOUNDER).
 	const handleBusinessSuccess = () => {
-		console.log("Business registration complete!");
-		navigate("/dashboard");
+		navigate("/settings/billing");
 	};
+
+	// Billing needs a business, so skipping that step still goes to the
+	// dashboard. The billing banner there points to the card page.
 
 	const handleSkipBusiness = () => {
 		navigate("/dashboard");
