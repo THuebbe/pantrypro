@@ -67,6 +67,13 @@ function describe(billing) {
 						title: "No active subscription",
 						detail: "Your subscription has ended. Resubscribe to keep it going.",
 				  };
+		case "exempt":
+			return {
+				tone: "gray",
+				icon: CheckCircle,
+				title: "No plan needed",
+				detail: "This is a test account. It has full access without a plan.",
+			};
 		case "none":
 			return {
 				tone: "blue",

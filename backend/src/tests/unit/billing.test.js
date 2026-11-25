@@ -20,6 +20,7 @@ const {
 } = await import("../../services/billing/billingCore.js");
 const { supabase } = await import("../../services/supabase.js");
 const { checkBillingAccess } = await import("../../middleware/billingGate.js");
+const { selectBusinessBilling } = await import("../../services/billing/businessBilling.js");
 const {
 	BillingError,
 	createCheckoutSession,
@@ -157,6 +158,32 @@ test("never subscribed and cancelled accounts are blocked, with the right prompt
 	}
 
 	assert.equal(accessFor(null, { enforced: true }).access, "blocked");
+});
+
+test("a billing-exempt test account is never blocked", () => {
+	for (const row of [
+		{ billing_status: null },
+		{ billing_status: "canceled" },
+		{
+			billing_status: "past_due",
+			billing_past_due_since: new Date(Date.now() - 30 * 86400000).toISOString(),
+		},
+	]) {
+		const access = accessFor({ ...row, billing_exempt: true }, { enforced: true });
+		assert.equal(access.access, "full");
+		assert.equal(access.state, "exempt");
+	}
+
+	// An exempt account on a real plan still shows that plan.
+	assert.equal(
+		accessFor({ billing_status: "trialing", billing_exempt: true }, { enforced: true }).state,
+		"trialing"
+	);
+	// Only an explicit true counts.
+	assert.equal(
+		accessFor({ billing_status: null, billing_exempt: "true" }, { enforced: true }).access,
+		"blocked"
+	);
 });
 
 test("a Stripe subscription maps onto the business columns", () => {
@@ -305,6 +332,46 @@ test("a user with no restaurant is sent to finish setup", async (t) => {
 			null
 		);
 	});
+});
+
+test("a billing-exempt business passes the gate", async (t) => {
+	stubBusiness(t, { billing_status: null, billing_exempt: true });
+
+	await withEnv(ENFORCED, async () =>
+		assert.equal(await checkBillingAccess(request({ method: "GET" })), null)
+	);
+});
+
+test("billing still works before the exempt column exists", async () => {
+	const selects = [];
+	const db = {
+		from: () => {
+			const chain = {
+				select: (columns) => {
+					selects.push(columns);
+					return chain;
+				},
+				eq: () => chain,
+				maybeSingle: async () =>
+					selects.at(-1).includes("billing_exempt")
+						? {
+								data: null,
+								error: { code: "42703", message: "column businesses.billing_exempt does not exist" },
+						  }
+						: { data: { billing_status: null }, error: null },
+			};
+			return chain;
+		},
+	};
+
+	const { data, error } = await selectBusinessBilling(
+		"billing_status",
+		(query) => query.eq("id", "biz-1"),
+		db
+	);
+	assert.equal(error, null);
+	assert.deepEqual(data, { billing_status: null });
+	assert.deepEqual(selects, ["billing_status, billing_exempt", "billing_status"]);
 });
 
 test("a trialing business passes the gate", async (t) => {

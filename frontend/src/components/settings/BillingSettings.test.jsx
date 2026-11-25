@@ -118,6 +118,14 @@ describe("BillingSettings", () => {
 		expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
 	});
 
+	it("tells a test account it needs no plan, and doesn't lock it", () => {
+		show({ state: "exempt", access: "full", exempt: true, canSubscribe: true });
+
+		expect(screen.getByText("No plan needed")).toBeInTheDocument();
+		expect(screen.queryByText(/needs an active plan/)).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
+	});
+
 	it("says payments aren't set up when Stripe isn't configured", () => {
 		show({ configured: false, enforced: false, state: "not_enforced", access: "full" });
 

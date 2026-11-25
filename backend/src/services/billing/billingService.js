@@ -26,6 +26,7 @@ import {
 	hasUsedTrial,
 	canStartSubscription,
 } from "./billingCore.js";
+import { selectBusinessBilling } from "./businessBilling.js";
 
 const BILLING_COLUMNS =
 	"id, name, stripe_customer_id, stripe_subscription_id, billing_status, trial_ends_at, current_period_end, billing_past_due_since";
@@ -69,11 +70,9 @@ export async function getBillingBusiness(businessId) {
 		throw new BillingError("Register your business before setting up billing.");
 	}
 
-	const { data, error } = await supabase
-		.from("businesses")
-		.select(BILLING_COLUMNS)
-		.eq("id", businessId)
-		.single();
+	const { data, error } = await selectBusinessBilling(BILLING_COLUMNS, (query) =>
+		query.eq("id", businessId)
+	);
 
 	if (error || !data) {
 		throw new BillingError("Business not found", 404);
@@ -122,6 +121,7 @@ export async function getBillingSummary(businessId) {
 		configured: mode.configured,
 		enforced: mode.enforced,
 		status: business.billing_status || "none",
+		exempt: business.billing_exempt === true,
 		access: access.access,
 		state: display.state,
 		message: mode.enforced ? access.message : "",
@@ -233,12 +233,11 @@ export async function applySubscription(subscription) {
 			: subscription.customer?.id;
 	const businessId = subscription.metadata?.business_id;
 
-	let query = supabase.from("businesses").select(BILLING_COLUMNS);
-	query = businessId
-		? query.eq("id", businessId)
-		: query.eq("stripe_customer_id", customerId);
-
-	const { data: business } = await query.maybeSingle();
+	const { data: business } = await selectBusinessBilling(BILLING_COLUMNS, (query) =>
+		businessId
+			? query.eq("id", businessId)
+			: query.eq("stripe_customer_id", customerId)
+	);
 
 	if (!business) {
 		console.warn(

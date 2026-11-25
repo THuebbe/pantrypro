@@ -76,6 +76,12 @@ describe("ProtectedRoute", () => {
 		expect(screen.getByText("Dashboard page")).toBeInTheDocument();
 	});
 
+	it("lets a billing-exempt test account in without a plan", () => {
+		billing = status({ enforced: true, access: "full", state: "exempt", exempt: true });
+		openAt("/dashboard");
+		expect(screen.getByText("Dashboard page")).toBeInTheDocument();
+	});
+
 	it("sends a signed-in user with no restaurant to finish setup", () => {
 		auth = { isAuthenticated: true, loading: false, user: { businessId: null } };
 		billing = status(undefined);

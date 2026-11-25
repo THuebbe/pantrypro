@@ -16,7 +16,7 @@
  * mounted before the routes in index.js.
  */
 
-import { supabase } from "../services/supabase.js";
+import { selectBusinessBilling } from "../services/billing/businessBilling.js";
 import { billingMode, accessFor } from "../services/billing/billingCore.js";
 
 const ALWAYS_ALLOWED = ["/api/auth", "/api/business", "/api/billing"];
@@ -48,11 +48,10 @@ export async function checkBillingAccess(req) {
 		};
 	}
 
-	const { data: business, error } = await supabase
-		.from("businesses")
-		.select("billing_status, billing_past_due_since")
-		.eq("id", req.businessId)
-		.maybeSingle();
+	const { data: business, error } = await selectBusinessBilling(
+		"billing_status, billing_past_due_since",
+		(query) => query.eq("id", req.businessId)
+	);
 
 	if (error) {
 		// If the billing lookup itself breaks, don't throw a paying customer
