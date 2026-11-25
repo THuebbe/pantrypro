@@ -12,6 +12,7 @@
  *   - Trialing or paid up: full access.
  *   - A payment fails: full access for a grace period, then blocked.
  *   - Cancelled, or never subscribed: blocked.
+ *   - A business marked billing_exempt (test accounts) is never blocked.
  *   - Blocked means every screen and API call sends the owner to the card
  *     page. Sign-in, the card page and Stripe's webhook always work, so an
  *     owner can always get back in by paying.
@@ -44,7 +45,24 @@ export function billingMode(env = process.env) {
  * @param {Date} [options.now]
  * @returns {{access: "full"|"blocked", state: string, message: string, graceEndsAt: string|null}}
  */
-export function accessFor(business, { enforced, now = new Date() } = {}) {
+export function accessFor(business, options = {}) {
+	const result = planAccess(business, options);
+
+	// Test accounts keep full access whatever their plan says. One with a
+	// real plan still shows that plan.
+	if (result.access === "blocked" && business?.billing_exempt === true) {
+		return {
+			access: "full",
+			state: "exempt",
+			message: "",
+			graceEndsAt: null,
+		};
+	}
+
+	return result;
+}
+
+function planAccess(business, { enforced, now = new Date() } = {}) {
 	const full = (state, message = "") => ({
 		access: "full",
 		state,
